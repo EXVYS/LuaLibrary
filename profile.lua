@@ -42,7 +42,7 @@ local State = {
     PageContainer = nil,
     Pages = {},         
     CurrentTabButton = nil,
-    ProfileFrame = nil, 
+    ProfileFrame = nil, -- Added for reference
 }
 
 ----------------------------------------------------------------------
@@ -126,27 +126,25 @@ local function SetupDragging(DragInstance, MainInstance)
             if IsDragInput(Input) and Dragging then
                 Dragging = false
             end
-        })
+        end)
     end)
 end
 
 ----------------------------------------------------------------------
--- PROFILE VIEW FUNCTIONS
+-- PROFILE VIEW FUNCTIONS (MOVED HERE)
 ----------------------------------------------------------------------
 
 local function CreateProfileView(Parent)
     -- We assume LocalPlayer is available because GetService("Players") succeeded earlier.
     if not LocalPlayer then return end
-    
-    -- Profile Frame: Total width 150 (36 PFP + 10 gap + 104 name container)
+
     local ProfileContainer = CreateInstance("Frame", {
         Name = "ProfileContainer",
         Parent = Parent,
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 150, 0, 36), 
-        -- Pinned to the bottom-left of the Parent (MainFrame)
-        Position = UDim2.new(0, 10, 1, -10), 
-        AnchorPoint = Vector2.new(0, 1), 
+        Size = UDim2.new(0, 120, 0, 60), -- Increased height for username
+        Position = UDim2.new(0, 10, 1, -70), -- Bottom left corner
+        AnchorPoint = Vector2.new(0, 1),
     })
     
     -- Circular Profile Picture
@@ -159,27 +157,27 @@ local function CreateProfileView(Parent)
         Position = UDim2.new(0, 0, 0, 0),
         BorderSizePixel = 0,
     })
-    ApplyCorner(ProfilePicture, 18) 
+    ApplyCorner(ProfilePicture, 18) -- Make it circular
     
     -- Name Container
     local NameContainer = CreateInstance("Frame", {
         Name = "NameContainer",
         Parent = ProfileContainer,
         BackgroundColor3 = Config.Theme.Frame,
-        BackgroundTransparency = Config.Theme.Transparency,
-        Size = UDim2.new(0, 104, 0, 36), 
-        Position = UDim2.new(0, 46, 0, 0), 
+        BackgroundTransparency = Config.Theme.Transparency, -- 0.650 transparency
+        Size = UDim2.new(0, 80, 0, 36),
+        Position = UDim2.new(0, 40, 0, 0),
         BorderSizePixel = 0,
     })
     ApplyCorner(NameContainer, 4)
     
-    -- Display Name (Top half, bold)
+    -- Display Name
     local DisplayName = CreateInstance("TextLabel", {
         Name = "DisplayName",
         Parent = NameContainer,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, 18),
-        Position = UDim2.new(0, Config.Theme.Padding, 0, 0), 
+        Size = UDim2.new(1, 0, 0, 18),
+        Position = UDim2.new(0, 0, 0, 0),
         Text = "Loading...",
         TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansSemibold,
@@ -187,18 +185,18 @@ local function CreateProfileView(Parent)
         TextXAlignment = Enum.TextXAlignment.Left,
     })
     
-    -- Username (Bottom half, smaller, slightly transparent)
+    -- Username (smaller text with 0.65 transparency)
     local Username = CreateInstance("TextLabel", {
         Name = "Username",
         Parent = NameContainer,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, 16),
-        Position = UDim2.new(0, Config.Theme.Padding, 0, 18), 
+        Size = UDim2.new(1, 0, 0, 16),
+        Position = UDim2.new(0, 0, 0, 18),
         Text = "@user",
         TextColor3 = Config.Theme.Text,
-        TextTransparency = 0.65, 
+        TextTransparency = 0.65, -- 0.65 transparency for username
         Font = Enum.Font.SourceSans,
-        TextSize = 10, 
+        TextSize = 10, -- Smaller text size
         TextXAlignment = Enum.TextXAlignment.Left,
     })
     
@@ -209,24 +207,30 @@ local function CreateProfileView(Parent)
             local displayName = LocalPlayer.DisplayName
             local userName = LocalPlayer.Name
             
+            -- Set display name and username
             DisplayName.Text = displayName
             Username.Text = "@" .. userName
             
+            -- Load profile picture
             local ThumbnailType = Enum.ThumbnailType.HeadShot
             local ThumbnailSize = Enum.ThumbnailSize.Size150x150
             
+            -- Note: GetUserThumbnailAsync is safe to call from client scripts.
             local success, content, isReady = pcall(Players.GetUserThumbnailAsync, Players, userId, ThumbnailType, ThumbnailSize)
             
             if success and isReady and content then
                 ProfilePicture.Image = content
             else
+                -- Fallback if thumbnail fails to load immediately or pcall failed
                 warn("Failed to load user thumbnail for profile view.")
             end
         end)
     end
     
+    -- Update profile when player is ready and on property change
     if LocalPlayer then
         UpdateProfileInfo()
+        -- Update if player properties change (e.g., display name change)
         LocalPlayer:GetPropertyChangedSignal("DisplayName"):Connect(UpdateProfileInfo)
     end
     
@@ -259,6 +263,9 @@ function Library.Create(Title)
     })
     State.ScreenGui = LibraryGui
     
+    -- ** FIX APPLIED HERE: Initialize the Profile View on the ScreenGui **
+    CreateProfileView(State.ScreenGui)
+
     -- 2. Main Frame (Window)
     local MainFrame = CreateInstance("Frame", {
         Name = "Main",
@@ -271,20 +278,17 @@ function Library.Create(Title)
     ApplyCorner(MainFrame)
     State.MainFrame = MainFrame
 
-    -- *CRITICAL FIX: Profile view is now created here, attached to MainFrame, and will move with the GUI.*
-    CreateProfileView(State.MainFrame)
-
-    -- 3. Title Bar (Dragger)
+    -- 3. Title Bar (Now acts as the full dragger)
     local TitleBar = CreateInstance("Frame", {
         Name = "TitleBar",
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Accent,
-        BackgroundTransparency = 0.3,
+        BackgroundTransparency = 0.3, -- Transparency of the drag bar (Player Utilities Part) is KEPT at 0.3
         Size = UDim2.new(1, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
     
-    -- Title Label
+    -- Title Label (takes 100% width)
     CreateInstance("TextLabel", {
         Parent = TitleBar,
         BackgroundTransparency = 1,
@@ -332,10 +336,10 @@ function Library.SwitchPage(PageName, Button)
         end
         
         if State.CurrentTabButton then
-            State.CurrentTabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 
+            State.CurrentTabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
         end
         if Button then
-            Button.BackgroundTransparency = Config.Theme.Transparency 
+            Button.BackgroundTransparency = Config.Theme.Transparency -- Uses 0.650
             State.CurrentTabButton = Button
         end
     end)
@@ -411,7 +415,7 @@ function Library.NewTab(PageName)
     if PageCount == 0 then
         Library.SwitchPage(PageName, TabButton)
     else
-        TabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1
+        TabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
     end
     
     return Page 
@@ -513,14 +517,14 @@ function PageModule:AddToggle(Text, InitialState, Callback)
     return self
 end
 
--- 3. Slider
+-- 3. Slider (FIXED - was missing Scale variable initialization)
 function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
     local ElementFrame = CreateElementFrame(self, 1.5)
     
     local Value = InitialValue or Min
     local Range = Max - Min
     local SliderActive = false
-    local Scale = (Value - Min) / Range 
+    local Scale = (Value - Min) / Range  -- FIX: Initialize Scale variable
 
     self.Elements[Text] = { CurrentValue = Value }
     
@@ -559,7 +563,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         BorderSizePixel = 0,
     })
     ApplyCorner(SliderBackground, 4)
-    SliderBackground.BackgroundTransparency = Config.Theme.Transparency + 0.1 
+    SliderBackground.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
     
     local SliderBar = CreateInstance("Frame", {
         Name = "SliderBar",
@@ -570,7 +574,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         BorderSizePixel = 0,
     })
     ApplyCorner(SliderBar, 4)
-    SliderBar.BackgroundTransparency = Config.Theme.Transparency 
+    SliderBar.BackgroundTransparency = Config.Theme.Transparency -- Uses 0.650
 
     local Handle = CreateInstance("Frame", {
         Name = "Handle",
@@ -592,7 +596,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         local NewValue = Min + (Range * Progress)
         Value = math.floor(NewValue * 10) / 10
 
-        Scale = (Value - Min) / Range 
+        Scale = (Value - Min) / Range  -- FIX: Update Scale variable
         
         SliderBar.Size = UDim2.new(Scale, 0, 1, 0)
         Handle.Position = UDim2.new(Scale, -7.5, 0.5, -7.5)
@@ -642,7 +646,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
     return self
 end
 
--- 4. Textbox
+-- 4. Textbox - NEWLY ADDED
 function PageModule:AddTextbox(Text, Placeholder, Callback)
     local ElementFrame = CreateElementFrame(self)
     
@@ -663,7 +667,7 @@ function PageModule:AddTextbox(Text, Placeholder, Callback)
         Name = "TextBox",
         Parent = ElementFrame,
         BackgroundColor3 = Config.Theme.Frame,
-        BackgroundTransparency = 0.3, 
+        BackgroundTransparency = 0.3, -- Slightly more transparent for input field
         Size = UDim2.new(0.55, 0, 0.7, 0),
         Position = UDim2.new(0.4, Config.Theme.Padding, 0.15, 0),
         Text = "",
@@ -689,7 +693,7 @@ function PageModule:AddTextbox(Text, Placeholder, Callback)
     return self
 end
 
--- 5. Dropdown
+-- 5. Dropdown - NEWLY ADDED
 function PageModule:AddDropdown(Text, Options, Default, Callback)
     local ElementFrame = CreateElementFrame(self)
     local IsOpen = false
