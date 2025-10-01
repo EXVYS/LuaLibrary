@@ -131,7 +131,7 @@ local function SetupDragging(DragInstance, MainInstance)
 end
 
 ----------------------------------------------------------------------
--- PROFILE VIEW FUNCTIONS (MOVED HERE)
+-- PROFILE VIEW FUNCTIONS
 ----------------------------------------------------------------------
 
 local function CreateProfileView(Parent)
@@ -142,8 +142,9 @@ local function CreateProfileView(Parent)
         Name = "ProfileContainer",
         Parent = Parent,
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 120, 0, 60), -- Increased height for username
-        Position = UDim2.new(0, 10, 1, -70), -- Bottom left corner
+        Size = UDim2.new(0, 120, 0, 60), 
+        -- Position adjusted: bottom-left corner relative to the MainFrame
+        Position = UDim2.new(0, 10, 1, -10), 
         AnchorPoint = Vector2.new(0, 1),
     })
     
@@ -263,9 +264,6 @@ function Library.Create(Title)
     })
     State.ScreenGui = LibraryGui
     
-    -- ** FIX APPLIED HERE: Initialize the Profile View on the ScreenGui **
-    CreateProfileView(State.ScreenGui)
-
     -- 2. Main Frame (Window)
     local MainFrame = CreateInstance("Frame", {
         Name = "Main",
@@ -277,6 +275,10 @@ function Library.Create(Title)
     })
     ApplyCorner(MainFrame)
     State.MainFrame = MainFrame
+
+    -- ** FIX APPLIED: Initialize the Profile View on the MainFrame **
+    -- This ensures the profile view moves when the user drags the window.
+    CreateProfileView(State.MainFrame)
 
     -- 3. Title Bar (Now acts as the full dragger)
     local TitleBar = CreateInstance("Frame", {
