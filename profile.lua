@@ -20,7 +20,7 @@ local UserInputService = GetService("UserInputService")
 local Config = {
     Name = "LuaLibrary",
     Theme = {
-        Background = Color3.fromRGB(30, 30, 30), 
+        Background = Color3.fromRGB(30, 30, 30),
         Accent = Color3.fromRGB(0, 0, 0),
         Frame = Color3.fromRGB(30, 30, 30),
         Text = Color3.fromRGB(255, 255, 255),
@@ -38,9 +38,9 @@ local Config = {
 local State = {
     ScreenGui = nil,
     MainFrame = nil,
-    TabFrame = nil,     
+    TabFrame = nil,
     PageContainer = nil,
-    Pages = {},         
+    Pages = {},
     CurrentTabButton = nil,
     ProfileFrame = nil, -- Added for reference
 }
@@ -62,19 +62,22 @@ local function CreateInstance(ClassName, Properties)
         end
         return Obj
     end)
-    
+
     if not Success then
         error("Failed to create instance: " .. ClassName)
         return nil
     end
-    
+
     -- Apply general transparency safely
     if Instance_ and Instance_:IsA("GuiObject") and not Properties.BackgroundTransparency then
         pcall(function()
-            Instance_.BackgroundTransparency = Config.Theme.Transparency -- Applies 0.650
+            -- Only apply the general transparency for most GuiObjects, not TextBoxes (which use 0.3 here)
+            if not Instance_:IsA("TextBox") then
+                Instance_.BackgroundTransparency = Config.Theme.Transparency -- Applies 0.650
+            end
         end)
     end
-    
+
     return Instance_
 end
 
@@ -90,9 +93,9 @@ local function SetupDragging(DragInstance, MainInstance)
     local Dragging = false
     local DragStart = nil
     local FrameStart = nil
-    
+
     local function IsDragInput(Input)
-        return Input.UserInputType == Enum.UserInputType.MouseButton1 
+        return Input.UserInputType == Enum.UserInputType.MouseButton1
             or Input.UserInputType == Enum.UserInputType.Touch
     end
 
@@ -121,7 +124,7 @@ local function SetupDragging(DragInstance, MainInstance)
                 SafeTween(NewPos)
             end
         end)
-        
+
         UserInputService.InputEnded:Connect(function(Input)
             if IsDragInput(Input) and Dragging then
                 Dragging = false
@@ -131,22 +134,24 @@ local function SetupDragging(DragInstance, MainInstance)
 end
 
 ----------------------------------------------------------------------
--- PROFILE VIEW FUNCTIONS (MOVED HERE)
+-- PROFILE VIEW FUNCTIONS (REVISED)
 ----------------------------------------------------------------------
 
 local function CreateProfileView(Parent)
     -- We assume LocalPlayer is available because GetService("Players") succeeded earlier.
     if not LocalPlayer then return end
 
+    -- New: ProfileContainer is parented to MainFrame and positioned relative to it.
     local ProfileContainer = CreateInstance("Frame", {
         Name = "ProfileContainer",
-        Parent = Parent,
+        Parent = Parent, -- Parent will be MainFrame
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 120, 0, 60), -- Increased height for username
-        Position = UDim2.new(0, 10, 1, -70), -- Bottom left corner
+        Size = UDim2.new(0, 120, 0, 60),
+        -- Positioned in the bottom left of the MainFrame, using Theme.Padding for offset.
+        Position = UDim2.new(0, Config.Theme.Padding, 1, -Config.Theme.Padding - 60),
         AnchorPoint = Vector2.new(0, 1),
     })
-    
+
     -- Circular Profile Picture
     local ProfilePicture = CreateInstance("ImageLabel", {
         Name = "ProfilePicture",
@@ -154,11 +159,11 @@ local function CreateProfileView(Parent)
         BackgroundColor3 = Config.Theme.Frame,
         BackgroundTransparency = 0,
         Size = UDim2.new(0, 36, 0, 36),
-        Position = UDim2.new(0, 0, 0, 0),
+        Position = UDim2.new(0, 0, 0.5, -18), -- Centered vertically in its 60-height container
         BorderSizePixel = 0,
     })
     ApplyCorner(ProfilePicture, 18) -- Make it circular
-    
+
     -- Name Container
     local NameContainer = CreateInstance("Frame", {
         Name = "NameContainer",
@@ -166,74 +171,72 @@ local function CreateProfileView(Parent)
         BackgroundColor3 = Config.Theme.Frame,
         BackgroundTransparency = Config.Theme.Transparency, -- 0.650 transparency
         Size = UDim2.new(0, 80, 0, 36),
-        Position = UDim2.new(0, 40, 0, 0),
+        Position = UDim2.new(0, 40, 0.5, -18), -- Positioned next to the profile picture
         BorderSizePixel = 0,
     })
     ApplyCorner(NameContainer, 4)
-    
-    -- Display Name
+
+    -- Display Name (Auto-Scaled)
     local DisplayName = CreateInstance("TextLabel", {
         Name = "DisplayName",
         Parent = NameContainer,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 18),
-        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(1, -5, 0.5, 0), -- Takes up the top half
+        Position = UDim2.new(0, 2, 0, 0), -- Small horizontal offset for left alignment
         Text = "Loading...",
         TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansSemibold,
-        TextSize = 12,
+        TextScaled = true, -- AUTO SCALING APPLIED
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    
-    -- Username (smaller text with 0.65 transparency)
+
+    -- Username (Auto-Scaled and more transparent)
     local Username = CreateInstance("TextLabel", {
         Name = "Username",
         Parent = NameContainer,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 16),
-        Position = UDim2.new(0, 0, 0, 18),
+        Size = UDim2.new(1, -5, 0.5, 0), -- Takes up the bottom half
+        Position = UDim2.new(0, 2, 0.5, 0), -- Small horizontal offset for left alignment
         Text = "@user",
         TextColor3 = Config.Theme.Text,
-        TextTransparency = 0.65, -- 0.65 transparency for username
+        TextTransparency = 0.35, -- Using 0.35 for a less transparent look than 0.65
         Font = Enum.Font.SourceSans,
-        TextSize = 10, -- Smaller text size
+        TextScaled = true, -- AUTO SCALING APPLIED
         TextXAlignment = Enum.TextXAlignment.Left,
     })
-    
+
     -- Function to update profile info
     local function UpdateProfileInfo()
         pcall(function()
             local userId = LocalPlayer.UserId
             local displayName = LocalPlayer.DisplayName
             local userName = LocalPlayer.Name
-            
+
             -- Set display name and username
             DisplayName.Text = displayName
             Username.Text = "@" .. userName
-            
+
             -- Load profile picture
             local ThumbnailType = Enum.ThumbnailType.HeadShot
             local ThumbnailSize = Enum.ThumbnailSize.Size150x150
-            
-            -- Note: GetUserThumbnailAsync is safe to call from client scripts.
+
             local success, content, isReady = pcall(Players.GetUserThumbnailAsync, Players, userId, ThumbnailType, ThumbnailSize)
-            
+
             if success and isReady and content then
                 ProfilePicture.Image = content
             else
-                -- Fallback if thumbnail fails to load immediately or pcall failed
                 warn("Failed to load user thumbnail for profile view.")
             end
         end)
     end
-    
+
     -- Update profile when player is ready and on property change
     if LocalPlayer then
         UpdateProfileInfo()
         -- Update if player properties change (e.g., display name change)
         LocalPlayer:GetPropertyChangedSignal("DisplayName"):Connect(UpdateProfileInfo)
     end
-    
+
     State.ProfileFrame = ProfileContainer
     return ProfileContainer
 end
@@ -243,18 +246,18 @@ end
 ----------------------------------------------------------------------
 
 function Library.Create(Title)
-    if State.MainFrame then return Library end 
-    
+    if State.MainFrame then return Library end
+
     local PlayerGui
     pcall(function()
         PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
     end)
-    
+
     if not PlayerGui then
         warn("Failed to access PlayerGui")
         return Library
     end
-    
+
     -- 1. ScreenGui
     local LibraryGui = CreateInstance("ScreenGui", {
         Name = Config.Name,
@@ -262,9 +265,6 @@ function Library.Create(Title)
         DisplayOrder = 100,
     })
     State.ScreenGui = LibraryGui
-    
-    -- ** FIX APPLIED HERE: Initialize the Profile View on the ScreenGui **
-    CreateProfileView(State.ScreenGui)
 
     -- 2. Main Frame (Window)
     local MainFrame = CreateInstance("Frame", {
@@ -278,16 +278,19 @@ function Library.Create(Title)
     ApplyCorner(MainFrame)
     State.MainFrame = MainFrame
 
+    -- ** FIX APPLIED HERE: Initialize the Profile View inside the MainFrame **
+    CreateProfileView(State.MainFrame)
+
     -- 3. Title Bar (Now acts as the full dragger)
     local TitleBar = CreateInstance("Frame", {
         Name = "TitleBar",
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Accent,
-        BackgroundTransparency = 0.3, -- Transparency of the drag bar (Player Utilities Part) is KEPT at 0.3
+        BackgroundTransparency = 0.3, -- Transparency of the drag bar is KEPT at 0.3
         Size = UDim2.new(1, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
-    
+
     -- Title Label (takes 100% width)
     CreateInstance("TextLabel", {
         Parent = TitleBar,
@@ -309,11 +312,20 @@ function Library.Create(Title)
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Frame,
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight),
+        -- TabFrame size must account for TitleBar and ProfileContainer (60 height + Padding)
+        Size = UDim2.new(0, Config.Theme.TabWidth, 1, -(Config.Theme.TitleHeight + 60 + Config.Theme.Padding)),
         Position = UDim2.new(0, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
-    
+    -- Add a UIListLayout to the TabFrame for automatic positioning of tab buttons
+    CreateInstance("UIListLayout", {
+        Parent = State.TabFrame,
+        Padding = UDim.new(0, 0),
+        HorizontalAlignment = Enum.HorizontalAlignment.Left,
+        VerticalAlignment = Enum.VerticalAlignment.Top,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+
     -- 5. Page Container (Right side)
     State.PageContainer = CreateInstance("Frame", {
         Name = "PageContainer",
@@ -323,7 +335,7 @@ function Library.Create(Title)
         Position = UDim2.new(0, Config.Theme.TabWidth, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
-    
+
     return Library
 end
 
@@ -334,7 +346,7 @@ function Library.SwitchPage(PageName, Button)
                 PageObj.Page.Visible = (Name == PageName)
             end
         end
-        
+
         if State.CurrentTabButton then
             State.CurrentTabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
         end
@@ -355,13 +367,13 @@ function PageModule.New(PageName)
     local Self = setmetatable({
         Name = PageName,
         YOffset = Config.Theme.Padding,
-        Elements = {}, 
+        Elements = {},
     }, {__index = PageModule})
-    
+
     Self.Page = CreateInstance("ScrollingFrame", {
         Name = PageName .. "Page",
         Parent = State.PageContainer,
-        BackgroundTransparency = 1, 
+        BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 1, 0),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         Active = true,
@@ -369,56 +381,56 @@ function PageModule.New(PageName)
         ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200),
         ScrollBarThickness = 6,
     })
-    
+
     function Self:GetNextPosition(HeightMultiplier)
         local TotalHeight = Config.Theme.ElementHeight * (HeightMultiplier or 1) + Config.Theme.Padding
         local Pos = UDim2.new(0, Config.Theme.Padding, 0, Self.YOffset)
-        
+
         Self.YOffset = Self.YOffset + TotalHeight
         Self.Page.CanvasSize = UDim2.new(0, 0, 0, Self.YOffset + Config.Theme.Padding)
-        
+
         return Pos
     end
-    
+
     State.Pages[PageName] = Self
-    
+
     return Self
 end
 
 function Library.NewTab(PageName)
     local PageCount = 0
     pcall(function()
-        PageCount = #State.TabFrame:GetChildren()
+        PageCount = #State.Pages -- Use the state table to check page count for initial visibility logic
     end)
-    
+
     local TabButton = CreateInstance("TextButton", {
         Name = PageName .. "Tab",
         Parent = State.TabFrame,
         BackgroundColor3 = Config.Theme.Frame,
         Size = UDim2.new(1, 0, 0, Config.Theme.ElementHeight),
-        Position = UDim2.new(0, 0, 0, PageCount * Config.Theme.ElementHeight),
         Text = PageName,
         TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansBold,
         TextSize = 15,
         BorderSizePixel = 0,
+        LayoutOrder = PageCount + 1, -- Use LayoutOrder since UIListLayout is now present
     })
-    
+
     local Page = PageModule.New(PageName)
-    
+
     pcall(function()
         TabButton.MouseButton1Click:Connect(function()
             Library.SwitchPage(PageName, TabButton)
         end)
     end)
-    
+
     if PageCount == 0 then
         Library.SwitchPage(PageName, TabButton)
     else
         TabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
     end
-    
-    return Page 
+
+    return Page
 end
 
 ----------------------------------------------------------------------
@@ -441,7 +453,7 @@ end
 -- 1. Button
 function PageModule:AddButton(Text, Callback)
     local ElementFrame = CreateElementFrame(self)
-    
+
     local Button = CreateInstance("TextButton", {
         Name = "Button",
         Parent = ElementFrame,
@@ -452,7 +464,7 @@ function PageModule:AddButton(Text, Callback)
         TextSize = 14,
         TextColor3 = Config.Theme.Text,
     })
-    
+
     -- Safe callback execution
     if Callback then
         pcall(function()
@@ -461,7 +473,7 @@ function PageModule:AddButton(Text, Callback)
             end)
         end)
     end
-    
+
     return self
 end
 
@@ -469,7 +481,7 @@ end
 function PageModule:AddToggle(Text, InitialState, Callback)
     local State_ = InitialState or false
     local ElementFrame = CreateElementFrame(self)
-    
+
     CreateInstance("TextLabel", {
         Name = "Label",
         Parent = ElementFrame,
@@ -499,7 +511,7 @@ function PageModule:AddToggle(Text, InitialState, Callback)
     local function UpdateState(NewState)
         State_ = NewState
         ToggleButton.Text = State_ and "✔" or ""
-        
+
         -- Safe callback execution
         if Callback then
             pcall(function()
@@ -513,21 +525,21 @@ function PageModule:AddToggle(Text, InitialState, Callback)
             UpdateState(not State_)
         end)
     end)
-    
+
     return self
 end
 
--- 3. Slider (FIXED - was missing Scale variable initialization)
+-- 3. Slider
 function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
     local ElementFrame = CreateElementFrame(self, 1.5)
-    
+
     local Value = InitialValue or Min
     local Range = Max - Min
     local SliderActive = false
-    local Scale = (Value - Min) / Range  -- FIX: Initialize Scale variable
+    local Scale = (Value - Min) / Range
 
     self.Elements[Text] = { CurrentValue = Value }
-    
+
     CreateInstance("TextLabel", {
         Name = "Label",
         Parent = ElementFrame,
@@ -540,7 +552,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         TextXAlignment = Enum.TextXAlignment.Left,
         Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
     })
-    
+
     local ValueLabel = CreateInstance("TextLabel", {
         Name = "ValueLabel",
         Parent = ElementFrame,
@@ -553,7 +565,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         TextXAlignment = Enum.TextXAlignment.Right,
         Position = UDim2.new(0.5, -Config.Theme.Padding, 0, 0),
     })
-    
+
     local SliderBackground = CreateInstance("Frame", {
         Name = "SliderBackground",
         Parent = ElementFrame,
@@ -563,8 +575,8 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         BorderSizePixel = 0,
     })
     ApplyCorner(SliderBackground, 4)
-    SliderBackground.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
-    
+    SliderBackground.BackgroundTransparency = Config.Theme.Transparency + 0.1
+
     local SliderBar = CreateInstance("Frame", {
         Name = "SliderBar",
         Parent = SliderBackground,
@@ -574,7 +586,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         BorderSizePixel = 0,
     })
     ApplyCorner(SliderBar, 4)
-    SliderBar.BackgroundTransparency = Config.Theme.Transparency -- Uses 0.650
+    SliderBar.BackgroundTransparency = Config.Theme.Transparency
 
     local Handle = CreateInstance("Frame", {
         Name = "Handle",
@@ -585,23 +597,23 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         BorderSizePixel = 0,
     })
     ApplyCorner(Handle, 7)
-    
+
     local Dragging = false
 
     local function UpdateSlider(XPos)
         local SliderWidth = SliderBackground.AbsoluteSize.X
         local RelativeX = math.max(0, math.min(SliderWidth, XPos - SliderBackground.AbsolutePosition.X))
         local Progress = RelativeX / SliderWidth
-        
+
         local NewValue = Min + (Range * Progress)
         Value = math.floor(NewValue * 10) / 10
 
-        Scale = (Value - Min) / Range  -- FIX: Update Scale variable
+        Scale = (Value - Min) / Range
         
         SliderBar.Size = UDim2.new(Scale, 0, 1, 0)
         Handle.Position = UDim2.new(Scale, -7.5, 0.5, -7.5)
         ValueLabel.Text = string.format("%.1f", Value)
-        
+
         self.Elements[Text].CurrentValue = Value
 
         -- Safe callback execution
@@ -631,14 +643,14 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
                 Dragging = true
             end
         end)
-        
+
         SliderBackground.InputBegan:Connect(function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                 SliderActive = true
                 UpdateSlider(Input.Position.X)
             end
         end)
-        
+
         UserInputService.InputChanged:Connect(OnInputChanged)
         UserInputService.InputEnded:Connect(OnInputEnded)
     end)
@@ -646,10 +658,10 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
     return self
 end
 
--- 4. Textbox - NEWLY ADDED
+-- 4. Textbox
 function PageModule:AddTextbox(Text, Placeholder, Callback)
     local ElementFrame = CreateElementFrame(self)
-    
+
     CreateInstance("TextLabel", {
         Name = "Label",
         Parent = ElementFrame,
@@ -689,16 +701,16 @@ function PageModule:AddTextbox(Text, Placeholder, Callback)
             end)
         end)
     end
-    
+
     return self
 end
 
--- 5. Dropdown - NEWLY ADDED
+-- 5. Dropdown
 function PageModule:AddDropdown(Text, Options, Default, Callback)
     local ElementFrame = CreateElementFrame(self)
     local IsOpen = false
     local Selected = Default or Options[1] or "Select..."
-    
+
     CreateInstance("TextLabel", {
         Name = "Label",
         Parent = ElementFrame,
@@ -735,11 +747,11 @@ function PageModule:AddDropdown(Text, Options, Default, Callback)
         BorderSizePixel = 0,
     })
     ApplyCorner(DropdownFrame)
-    
+
     local function ToggleDropdown()
         IsOpen = not IsOpen
         DropdownFrame.Visible = IsOpen
-        
+
         if IsOpen then
             -- Clear previous options
             for _, child in pairs(DropdownFrame:GetChildren()) do
@@ -747,7 +759,7 @@ function PageModule:AddDropdown(Text, Options, Default, Callback)
                     child:Destroy()
                 end
             end
-            
+
             -- Create new options
             for i, option in ipairs(Options) do
                 local OptionButton = CreateInstance("TextButton", {
@@ -761,14 +773,14 @@ function PageModule:AddDropdown(Text, Options, Default, Callback)
                     Font = Enum.Font.SourceSans,
                     TextSize = 12,
                 })
-                
+
                 pcall(function()
                     OptionButton.MouseButton1Click:Connect(function()
                         Selected = option
                         DropdownButton.Text = Selected
                         IsOpen = false
                         DropdownFrame.Visible = false
-                        
+
                         if Callback then
                             pcall(function()
                                 Callback(Selected)
@@ -785,7 +797,7 @@ function PageModule:AddDropdown(Text, Options, Default, Callback)
             ToggleDropdown()
         end)
     end)
-    
+
     return self
 end
 
