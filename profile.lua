@@ -131,19 +131,19 @@ local function SetupDragging(DragInstance, MainInstance)
 end
 
 ----------------------------------------------------------------------
--- PROFILE VIEW FUNCTIONS (Updated to fit text)
+-- PROFILE VIEW FUNCTIONS
 ----------------------------------------------------------------------
 
 local function CreateProfileView(Parent)
     -- We assume LocalPlayer is available because GetService("Players") succeeded earlier.
     if not LocalPlayer then return end
 
-    -- Total width increased to 150 (36 PFP + 10 gap + 104 name container)
+    -- Total width 150 (36 PFP + 10 gap + 104 name container)
     local ProfileContainer = CreateInstance("Frame", {
         Name = "ProfileContainer",
         Parent = Parent,
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 150, 0, 36), -- Adjusted total size to 36 height (same as PFP)
+        Size = UDim2.new(0, 150, 0, 36), 
         -- Position: 10px from the left and 10px from the bottom of the Parent (MainFrame)
         Position = UDim2.new(0, 10, 1, -10), 
         AnchorPoint = Vector2.new(0, 1), -- Anchored to the bottom-left corner
@@ -277,8 +277,7 @@ function Library.Create(Title)
     ApplyCorner(MainFrame)
     State.MainFrame = MainFrame
 
-    -- Initialize the Profile View on the MainFrame (bottom-left of the GUI)
-    CreateProfileView(State.MainFrame)
+    -- NOTE: Profile view creation is now an explicit call to Library.CreateProfile()
 
     -- 3. Title Bar (Now acts as the full dragger)
     local TitleBar = CreateInstance("Frame", {
@@ -325,6 +324,24 @@ function Library.Create(Title)
         Position = UDim2.new(0, Config.Theme.TabWidth, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
+    
+    return Library
+end
+
+-- 6. New Public Function to create the Profile View
+function Library.CreateProfile()
+    if not State.MainFrame then
+        warn("Library must be created before adding a profile view using CreateProfile().")
+        return Library
+    end
+    -- Prevent duplicate creation
+    if State.ProfileFrame then 
+        warn("Profile view already exists.")
+        return Library
+    end
+    
+    -- Create the profile view and parent it to the MainFrame
+    CreateProfileView(State.MainFrame)
     
     return Library
 end
@@ -648,7 +665,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
     return self
 end
 
--- 4. Textbox - NEWLY ADDED
+-- 4. Textbox
 function PageModule:AddTextbox(Text, Placeholder, Callback)
     local ElementFrame = CreateElementFrame(self)
     
@@ -695,7 +712,7 @@ function PageModule:AddTextbox(Text, Placeholder, Callback)
     return self
 end
 
--- 5. Dropdown - NEWLY ADDED
+-- 5. Dropdown
 function PageModule:AddDropdown(Text, Options, Default, Callback)
     local ElementFrame = CreateElementFrame(self)
     local IsOpen = false
