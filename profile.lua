@@ -15,6 +15,7 @@ local Players = GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local TweenService = GetService("TweenService")
 local UserInputService = GetService("UserInputService")
+-- GroupService is no longer needed since we removed the repeated group check
 
 -- Configuration and Theme
 local Config = {
@@ -143,6 +144,10 @@ local function CheckGroupMembership(GroupId)
     return inGroup
 end
 
+----------------------------------------------------------------------
+-- GROUP JOIN GUI (Blocker)
+----------------------------------------------------------------------
+
 local function CreateGroupJoinGUI(GroupId)
     if State.MainFrame then
         State.MainFrame:Destroy()
@@ -172,8 +177,8 @@ local function CreateGroupJoinGUI(GroupId)
         BorderSizePixel = 0,
     })
     ApplyCorner(MainFrame)
-    State.MainFrame = MainFrame
-
+    State.MainFrame = MainFrame -- Temporarily holds the blocker GUI
+    
     -- Title Bar
     local TitleBar = CreateInstance("Frame", {
         Name = "TitleBar",
@@ -188,7 +193,7 @@ local function CreateGroupJoinGUI(GroupId)
         Parent = TitleBar,
         BackgroundTransparency = 1,
         Size = UDim2.new(1, 0, 1, 0),
-        Text = "Group",
+        Text = "Group Required",
         TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansBold,
         TextSize = 20,
@@ -218,73 +223,102 @@ local function CreateGroupJoinGUI(GroupId)
         BorderSizePixel = 0,
     })
     
-    -- Create Join Tab
-    local JoinTabButton = CreateInstance("TextButton", {
-        Name = "JoinTab",
-        Parent = TabFrame,
-        BackgroundColor3 = Config.Theme.Frame,
-        Size = UDim2.new(1, 0, 0, Config.Theme.ElementHeight),
-        Position = UDim2.new(0, 0, 0, 0),
-        Text = "Join",
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 15,
-        BorderSizePixel = 0,
-    })
-    
-    -- Create Join Page
-    local JoinPage = CreateInstance("ScrollingFrame", {
-        Name = "JoinPage",
-        Parent = PageContainer,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 1, 0),
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        Active = true,
-        Visible = true,
-        ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200),
-        ScrollBarThickness = 6,
-    })
-    
-    local YOffset = Config.Theme.Padding
-    
-    local function AddButton(Text, Callback, HeightMultiplier)
-        local ElementFrame = CreateInstance("Frame", {
-            Name = "ElementFrame",
-            Parent = JoinPage,
+    local ActivePage = nil
+    local ActiveTab = nil
+
+    -- Function to create a tab button and its corresponding page
+    local function CreateBlockerTab(Name)
+        local TabCount = #TabFrame:GetChildren()
+        
+        local TabButton = CreateInstance("TextButton", {
+            Name = Name .. "Tab",
+            Parent = TabFrame,
             BackgroundColor3 = Config.Theme.Frame,
-            Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, Config.Theme.ElementHeight * (HeightMultiplier or 1)),
-            Position = UDim2.new(0, Config.Theme.Padding, 0, YOffset),
+            Size = UDim2.new(1, 0, 0, Config.Theme.ElementHeight),
+            Position = UDim2.new(0, 0, 0, TabCount * Config.Theme.ElementHeight),
+            Text = Name,
+            TextColor3 = Config.Theme.Text,
+            Font = Enum.Font.SourceSansBold,
+            TextSize = 15,
             BorderSizePixel = 0,
         })
-        ApplyCorner(ElementFrame)
         
-        local Button = CreateInstance("TextButton", {
-            Name = "Button",
-            Parent = ElementFrame,
-            BackgroundColor3 = Config.Theme.Frame,
+        local Page = CreateInstance("ScrollingFrame", {
+            Name = Name .. "Page",
+            Parent = PageContainer,
+            BackgroundTransparency = 1,
             Size = UDim2.new(1, 0, 1, 0),
-            Text = Text,
-            Font = Enum.Font.SourceSans,
-            TextSize = 14,
-            TextColor3 = Config.Theme.Text,
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            Active = true,
+            Visible = false,
+            ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200),
+            ScrollBarThickness = 6,
         })
         
-        if Callback then
-            pcall(function()
-                Button.MouseButton1Click:Connect(function()
-                    pcall(Callback)
+        local YOffset = Config.Theme.Padding
+        
+        -- Add a simple button function for the blocker pages
+        local function AddButton(Text, Callback, HeightMultiplier)
+            local ElementFrame = CreateInstance("Frame", {
+                Name = "ElementFrame",
+                Parent = Page,
+                BackgroundColor3 = Config.Theme.Frame,
+                Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, Config.Theme.ElementHeight * (HeightMultiplier or 1)),
+                Position = UDim2.new(0, Config.Theme.Padding, 0, YOffset),
+                BorderSizePixel = 0,
+            })
+            ApplyCorner(ElementFrame)
+            
+            local Button = CreateInstance("TextButton", {
+                Name = "Button",
+                Parent = ElementFrame,
+                BackgroundColor3 = Config.Theme.Frame,
+                Size = UDim2.new(1, 0, 1, 0),
+                Text = Text,
+                Font = Enum.Font.SourceSans,
+                TextSize = 14,
+                TextColor3 = Config.Theme.Text,
+            })
+            
+            if Callback then
+                pcall(function()
+                    Button.MouseButton1Click:Connect(function()
+                        pcall(Callback)
+                    end)
                 end)
-            end)
+            end
+            
+            YOffset = YOffset + Config.Theme.ElementHeight * (HeightMultiplier or 1) + Config.Theme.Padding
+            Page.CanvasSize = UDim2.new(0, 0, 0, YOffset + Config.Theme.Padding)
+            
+            return Button
         end
         
-        YOffset = YOffset + Config.Theme.ElementHeight * (HeightMultiplier or 1) + Config.Theme.Padding
-        JoinPage.CanvasSize = UDim2.new(0, 0, 0, YOffset + Config.Theme.Padding)
+        local function Switch()
+            if ActivePage then
+                ActivePage.Visible = false
+                ActiveTab.BackgroundTransparency = Config.Theme.Transparency + 0.1
+            end
+            Page.Visible = true
+            TabButton.BackgroundTransparency = Config.Theme.Transparency
+            ActivePage = Page
+            ActiveTab = TabButton
+        end
         
-        return Button
+        pcall(function()
+            TabButton.MouseButton1Click:Connect(Switch)
+        end)
+
+        return { Page = Page, Switch = Switch, AddButton = AddButton }
     end
+
+    -- Create 'Join' Tab
+    local JoinTab = CreateBlockerTab("Join")
+    JoinTab.AddButton("Group ID: " .. tostring(GroupId), function()
+        -- Do nothing, just display ID
+    end)
     
-    -- Add group join buttons to Join tab
-    AddButton("📋 Copy Group Link", function()
+    JoinTab.AddButton("📋 Copy Group Link", function()
         local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
         if setclipboard then
             setclipboard(groupLink)
@@ -293,20 +327,17 @@ local function CreateGroupJoinGUI(GroupId)
         end
     end)
     
-    AddButton("🔄 Check Again", function()
-        -- Check if user joined the group
-        if CheckGroupMembership(GroupId) then
-            -- User joined! Destroy this GUI and reload the script
-            LibraryGui:Destroy()
-            State.MainFrame = nil
-            State.GroupChecked = false
-            State.IsInGroup = true
-            -- The user will need to re-execute the script to get the main GUI
-        else
-            -- Still not in group, show message
-            warn("You still haven't joined the group! Join group ID: " .. GroupId)
-        end
+    -- Create 'Credits' Tab
+    local CreditsTab = CreateBlockerTab("Credits")
+    CreditsTab.AddButton("Envysplague", function() 
+        if setclipboard then setclipboard("guns.lol/envysplague") end
     end)
+    CreditsTab.AddButton("Dsc.gg/rbi", function() 
+        if setclipboard then setclipboard("Dsc.gg/rbi") end
+    end)
+    
+    -- Set initial tab
+    JoinTab.Switch()
     
     return LibraryGui
 end
@@ -373,7 +404,7 @@ function Library.Create(Title)
         Name = "TitleBar",
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Accent,
-        BackgroundTransparency = 0.3, -- Transparency of the drag bar (Player Utilities Part) is KEPT at 0.3
+        BackgroundTransparency = 0.3,
         Size = UDim2.new(1, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
@@ -445,13 +476,13 @@ function PageModule.New(PageName)
     local Self = setmetatable({
         Name = PageName,
         YOffset = Config.Theme.Padding,
-        Elements = {}, 
+        Elements = {},  
     }, {__index = PageModule})
     
     Self.Page = CreateInstance("ScrollingFrame", {
         Name = PageName .. "Page",
         Parent = State.PageContainer,
-        BackgroundTransparency = 1, 
+        BackgroundTransparency = 1,  
         Size = UDim2.new(1, 0, 1, 0),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         Active = true,
@@ -476,9 +507,18 @@ function PageModule.New(PageName)
 end
 
 function Library.NewTab(PageName)
-    -- If group is required and user is not in group, don't create tabs for main GUI
+    -- Prevent creating tabs for the main GUI if the group check failed
     if State.RequiredGroupId and not State.IsInGroup then
-        return { AddButton = function() return end, AddToggle = function() return end, AddSlider = function() return end, AddTextbox = function() return end, AddDropdown = function() return end, AddGroupVerification = function() return end }
+        -- Return a dummy object with stub functions
+        local dummy = { 
+            AddButton = function() return dummy end, 
+            AddToggle = function() return dummy end, 
+            AddSlider = function() return dummy end, 
+            AddTextbox = function() return dummy end, 
+            AddDropdown = function() return dummy end, 
+            AddGroupVerification = function() return dummy end 
+        }
+        return dummy
     end
     
     local PageCount = 0
@@ -513,7 +553,7 @@ function Library.NewTab(PageName)
         TabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
     end
     
-    return Page 
+    return Page  
 end
 
 ----------------------------------------------------------------------
@@ -609,6 +649,36 @@ function PageModule:AddToggle(Text, InitialState, Callback)
         end)
     end)
     
+    return self
+end
+
+-- 3. Slider (stubbed out - to keep the original element functions intact)
+function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
+    -- This function intentionally remains a stub to save space in the final script, 
+    -- as you only provided Button and Toggle implementations in your core library.
+    local ElementFrame = CreateElementFrame(self, 1.5)
+    CreateInstance("TextLabel", {Parent=ElementFrame, BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="[Slider Placeholder: " .. Text .. "]", TextColor3=Color3.fromRGB(255,165,0), Font=Enum.Font.SourceSans, TextSize=14})
+    return self
+end
+
+-- 4. Textbox (stubbed out)
+function PageModule:AddTextbox(Text, Placeholder, Callback)
+    local ElementFrame = CreateElementFrame(self)
+    CreateInstance("TextLabel", {Parent=ElementFrame, BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="[Textbox Placeholder: " .. Text .. "]", TextColor3=Color3.fromRGB(255,165,0), Font=Enum.Font.SourceSans, TextSize=14})
+    return self
+end
+
+-- 5. Dropdown (stubbed out)
+function PageModule:AddDropdown(Text, Options, Default, Callback)
+    local ElementFrame = CreateElementFrame(self)
+    CreateInstance("TextLabel", {Parent=ElementFrame, BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="[Dropdown Placeholder: " .. Text .. "]", TextColor3=Color3.fromRGB(255,165,0), Font=Enum.Font.SourceSans, TextSize=14})
+    return self
+end
+
+-- 6. Group Verification (stubbed out - was removed in the previous version's request)
+function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
+    local ElementFrame = CreateElementFrame(self)
+    CreateInstance("TextLabel", {Parent=ElementFrame, BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="[Group Verification Placeholder]", TextColor3=Color3.fromRGB(255,165,0), Font=Enum.Font.SourceSans, TextSize=14})
     return self
 end
 
