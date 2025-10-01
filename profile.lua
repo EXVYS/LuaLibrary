@@ -283,17 +283,19 @@ local function CreateGroupJoinGUI(GroupId)
         return Button
     end
     
-AddButton("Copy Group Link", function()
-    local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
-    if setclipboard then
-        setclipboard(groupLink)
-    elseif writeclipboard then
-        writeclipboard(groupLink)
-    end
-end)
-
-return LibraryGui
+    -- Add group join buttons to Join tab
+    AddButton("Copy Group Link", function()
+        local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
+        if setclipboard then
+            setclipboard(groupLink)
+        elseif writeclipboard then
+            writeclipboard(groupLink)
+        end
+    end)
+    
+    return LibraryGui
 end
+
 ----------------------------------------------------------------------
 -- CORE WINDOW & TAB MANAGEMENT
 ----------------------------------------------------------------------
@@ -461,7 +463,14 @@ end
 function Library.NewTab(PageName)
     -- If group is required and user is not in group, don't create tabs for main GUI
     if State.RequiredGroupId and not State.IsInGroup then
-        return { AddButton = function() return end, AddToggle = function() return end, AddSlider = function() return end, AddTextbox = function() return end, AddDropdown = function() return end, AddGroupVerification = function() return end }
+        return { 
+            AddButton = function() return end, 
+            AddToggle = function() return end, 
+            AddSlider = function() return end, 
+            AddTextbox = function() return end, 
+            AddDropdown = function() return end, 
+            AddGroupVerification = function() return end 
+        }
     end
     
     local PageCount = 0
@@ -594,3 +603,277 @@ function PageModule:AddToggle(Text, InitialState, Callback)
     
     return self
 end
+
+-- 3. Slider
+function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
+    local ElementFrame = CreateElementFrame(self, 1.5)
+    
+    local Value = InitialValue or Min
+    local Range = Max - Min
+    local SliderActive = false
+    local Scale = (Value - Min) / Range
+
+    self.Elements[Text] = { CurrentValue = Value }
+    
+    CreateInstance("TextLabel", {
+        Name = "Label",
+        Parent = ElementFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.5, 0, 0, Config.Theme.ElementHeight * 0.5),
+        Text = Text,
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
+    })
+    
+    local ValueLabel = CreateInstance("TextLabel", {
+        Name = "ValueLabel",
+        Parent = ElementFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.4, 0, 0, Config.Theme.ElementHeight * 0.5),
+        Text = string.format("%.1f", Value),
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Position = UDim2.new(0.5, -Config.Theme.Padding, 0, 0),
+    })
+    
+    local SliderBackground = CreateInstance("Frame", {
+        Name = "SliderBackground",
+        Parent = ElementFrame,
+        BackgroundColor3 = Color3.fromRGB(50, 50, 50),
+        Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, 8),
+        Position = UDim2.new(0, Config.Theme.Padding, 0, Config.Theme.ElementHeight * 0.8),
+        BorderSizePixel = 0,
+    })
+    ApplyCorner(SliderBackground, 4)
+    SliderBackground.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
+    
+    local SliderBar = CreateInstance("Frame", {
+        Name = "SliderBar",
+        Parent = SliderBackground,
+        BackgroundColor3 = Color3.fromRGB(0, 255, 0),
+        Size = UDim2.new(Scale, 0, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
+        BorderSizePixel = 0,
+    })
+    ApplyCorner(SliderBar, 4)
+    SliderBar.BackgroundTransparency = Config.Theme.Transparency -- Uses 0.650
+
+    local Handle = CreateInstance("Frame", {
+        Name = "Handle",
+        Parent = SliderBackground,
+        BackgroundColor3 = Config.Theme.Text,
+        Size = UDim2.new(0, 15, 0, 15),
+        Position = UDim2.new(Scale, -7.5, 0.5, -7.5),
+        BorderSizePixel = 0,
+    })
+    ApplyCorner(Handle, 7)
+    
+    local Dragging = false
+
+    local function UpdateSlider(XPos)
+        local SliderWidth = SliderBackground.AbsoluteSize.X
+        local RelativeX = math.max(0, math.min(SliderWidth, XPos - SliderBackground.AbsolutePosition.X))
+        local Progress = RelativeX / SliderWidth
+        
+        local NewValue = Min + (Range * Progress)
+        Value = math.floor(NewValue * 10) / 10
+
+        Scale = (Value - Min) / Range
+        
+        SliderBar.Size = UDim2.new(Scale, 0, 1, 0)
+        Handle.Position = UDim2.new(Scale, -7.5, 0.5, -7.5)
+        ValueLabel.Text = string.format("%.1f", Value)
+        
+        self.Elements[Text].CurrentValue = Value
+
+        -- Safe callback execution
+        if Callback then
+            pcall(function()
+                Callback(Value)
+            end)
+        end
+    end
+
+    local function OnInputChanged(Input)
+        if (Dragging or SliderActive) and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+            UpdateSlider(Input.Position.X)
+        end
+    end
+
+    local function OnInputEnded(Input)
+        if (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
+            Dragging = false
+            SliderActive = false
+        end
+    end
+
+    pcall(function()
+        Handle.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                Dragging = true
+            end
+        end)
+        
+        SliderBackground.InputBegan:Connect(function(Input)
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+                SliderActive = true
+                UpdateSlider(Input.Position.X)
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(OnInputChanged)
+        UserInputService.InputEnded:Connect(OnInputEnded)
+    end)
+
+    return self
+end
+
+-- 4. Textbox
+function PageModule:AddTextbox(Text, Placeholder, Callback)
+    local ElementFrame = CreateElementFrame(self)
+    
+    CreateInstance("TextLabel", {
+        Name = "Label",
+        Parent = ElementFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.4, 0, 1, 0),
+        Text = Text,
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
+    })
+
+    local TextBox = CreateInstance("TextBox", {
+        Name = "TextBox",
+        Parent = ElementFrame,
+        BackgroundColor3 = Config.Theme.Frame,
+        BackgroundTransparency = 0.3, -- Slightly more transparent for input field
+        Size = UDim2.new(0.55, 0, 0.7, 0),
+        Position = UDim2.new(0.4, Config.Theme.Padding, 0.15, 0),
+        Text = "",
+        PlaceholderText = Placeholder or "Enter text...",
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        ClearTextOnFocus = false,
+    })
+    ApplyCorner(TextBox)
+
+    -- Safe callback execution on focus lost (Enter key or click away)
+    if Callback then
+        pcall(function()
+            TextBox.FocusLost:Connect(function(enterPressed)
+                pcall(function()
+                    Callback(TextBox.Text, enterPressed)
+                end)
+            end)
+        end)
+    end
+    
+    return self
+end
+
+-- 5. Dropdown
+function PageModule:AddDropdown(Text, Options, Default, Callback)
+    local ElementFrame = CreateElementFrame(self)
+    local IsOpen = false
+    local Selected = Default or Options[1] or "Select..."
+    
+    CreateInstance("TextLabel", {
+        Name = "Label",
+        Parent = ElementFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.4, 0, 1, 0),
+        Text = Text,
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
+    })
+
+    local DropdownButton = CreateInstance("TextButton", {
+        Name = "DropdownButton",
+        Parent = ElementFrame,
+        BackgroundColor3 = Config.Theme.Frame,
+        Size = UDim2.new(0.55, 0, 0.7, 0),
+        Position = UDim2.new(0.4, Config.Theme.Padding, 0.15, 0),
+        Text = Selected,
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+    })
+    ApplyCorner(DropdownButton)
+
+    local DropdownFrame = CreateInstance("Frame", {
+        Name = "DropdownFrame",
+        Parent = ElementFrame,
+        BackgroundColor3 = Config.Theme.Frame,
+        Size = UDim2.new(0.55, 0, 0, #Options * Config.Theme.ElementHeight),
+        Position = UDim2.new(0.4, Config.Theme.Padding, 0.85, 0),
+        Visible = false,
+        BorderSizePixel = 0,
+    })
+    ApplyCorner(DropdownFrame)
+    
+    local function ToggleDropdown()
+        IsOpen = not IsOpen
+        DropdownFrame.Visible = IsOpen
+        
+        if IsOpen then
+            -- Clear previous options
+            for _, child in pairs(DropdownFrame:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child:Destroy()
+                end
+            end
+            
+            -- Create new options
+            for i, option in ipairs(Options) do
+                local OptionButton = CreateInstance("TextButton", {
+                    Name = "Option_" .. option,
+                    Parent = DropdownFrame,
+                    BackgroundColor3 = Config.Theme.Frame,
+                    Size = UDim2.new(1, 0, 0, Config.Theme.ElementHeight),
+                    Position = UDim2.new(0, 0, 0, (i-1) * Config.Theme.ElementHeight),
+                    Text = option,
+                    TextColor3 = Config.Theme.Text,
+                    Font = Enum.Font.SourceSans,
+                    TextSize = 12,
+                })
+                
+                pcall(function()
+                    OptionButton.MouseButton1Click:Connect(function()
+                        Selected = option
+                        DropdownButton.Text = Selected
+                        IsOpen = false
+                        DropdownFrame.Visible = false
+                        
+                        if Callback then
+                            pcall(function()
+                                Callback(Selected)
+                            end)
+                        end
+                    end)
+                end)
+            end
+        end
+    end
+
+    pcall(function()
+        DropdownButton.MouseButton1Click:Connect(function()
+            ToggleDropdown()
+        end)
+    end)
+    
+    return self
+end
+
+return Library
