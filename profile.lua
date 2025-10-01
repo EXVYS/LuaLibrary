@@ -126,26 +126,27 @@ local function SetupDragging(DragInstance, MainInstance)
             if IsDragInput(Input) and Dragging then
                 Dragging = false
             end
-        end)
+        })
     end)
 end
 
 ----------------------------------------------------------------------
--- PROFILE VIEW FUNCTIONS
+-- PROFILE VIEW FUNCTIONS (Updated to fit text)
 ----------------------------------------------------------------------
 
 local function CreateProfileView(Parent)
     -- We assume LocalPlayer is available because GetService("Players") succeeded earlier.
     if not LocalPlayer then return end
 
+    -- Total width increased to 150 (36 PFP + 10 gap + 104 name container)
     local ProfileContainer = CreateInstance("Frame", {
         Name = "ProfileContainer",
         Parent = Parent,
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, 120, 0, 60), 
-        -- Position adjusted: bottom-left corner relative to the MainFrame
+        Size = UDim2.new(0, 150, 0, 36), -- Adjusted total size to 36 height (same as PFP)
+        -- Position: 10px from the left and 10px from the bottom of the Parent (MainFrame)
         Position = UDim2.new(0, 10, 1, -10), 
-        AnchorPoint = Vector2.new(0, 1),
+        AnchorPoint = Vector2.new(0, 1), -- Anchored to the bottom-left corner
     })
     
     -- Circular Profile Picture
@@ -160,25 +161,25 @@ local function CreateProfileView(Parent)
     })
     ApplyCorner(ProfilePicture, 18) -- Make it circular
     
-    -- Name Container
+    -- Name Container (takes up the remaining 104 pixels)
     local NameContainer = CreateInstance("Frame", {
         Name = "NameContainer",
         Parent = ProfileContainer,
         BackgroundColor3 = Config.Theme.Frame,
         BackgroundTransparency = Config.Theme.Transparency, -- 0.650 transparency
-        Size = UDim2.new(0, 80, 0, 36),
-        Position = UDim2.new(0, 40, 0, 0),
+        Size = UDim2.new(0, 104, 0, 36), -- Increased width for text
+        Position = UDim2.new(0, 46, 0, 0), -- 36px (PFP) + 10px (Gap) = 46
         BorderSizePixel = 0,
     })
     ApplyCorner(NameContainer, 4)
     
-    -- Display Name
+    -- Display Name (positioned with internal padding)
     local DisplayName = CreateInstance("TextLabel", {
         Name = "DisplayName",
         Parent = NameContainer,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 18),
-        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, 18),
+        Position = UDim2.new(0, Config.Theme.Padding, 0, 0), -- Left padding
         Text = "Loading...",
         TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansSemibold,
@@ -186,13 +187,13 @@ local function CreateProfileView(Parent)
         TextXAlignment = Enum.TextXAlignment.Left,
     })
     
-    -- Username (smaller text with 0.65 transparency)
+    -- Username (smaller text with 0.65 transparency, positioned with internal padding)
     local Username = CreateInstance("TextLabel", {
         Name = "Username",
         Parent = NameContainer,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 16),
-        Position = UDim2.new(0, 0, 0, 18),
+        Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, 16),
+        Position = UDim2.new(0, Config.Theme.Padding, 0, 18), -- Left padding, below display name
         Text = "@user",
         TextColor3 = Config.Theme.Text,
         TextTransparency = 0.65, -- 0.65 transparency for username
@@ -276,8 +277,7 @@ function Library.Create(Title)
     ApplyCorner(MainFrame)
     State.MainFrame = MainFrame
 
-    -- ** FIX APPLIED: Initialize the Profile View on the MainFrame **
-    -- This ensures the profile view moves when the user drags the window.
+    -- Initialize the Profile View on the MainFrame (bottom-left of the GUI)
     CreateProfileView(State.MainFrame)
 
     -- 3. Title Bar (Now acts as the full dragger)
@@ -519,14 +519,14 @@ function PageModule:AddToggle(Text, InitialState, Callback)
     return self
 end
 
--- 3. Slider (FIXED - was missing Scale variable initialization)
+-- 3. Slider
 function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
     local ElementFrame = CreateElementFrame(self, 1.5)
     
     local Value = InitialValue or Min
     local Range = Max - Min
     local SliderActive = false
-    local Scale = (Value - Min) / Range  -- FIX: Initialize Scale variable
+    local Scale = (Value - Min) / Range 
 
     self.Elements[Text] = { CurrentValue = Value }
     
@@ -598,7 +598,7 @@ function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
         local NewValue = Min + (Range * Progress)
         Value = math.floor(NewValue * 10) / 10
 
-        Scale = (Value - Min) / Range  -- FIX: Update Scale variable
+        Scale = (Value - Min) / Range 
         
         SliderBar.Size = UDim2.new(Scale, 0, 1, 0)
         Handle.Position = UDim2.new(Scale, -7.5, 0.5, -7.5)
