@@ -15,7 +15,6 @@ local Players = GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local TweenService = GetService("TweenService")
 local UserInputService = GetService("UserInputService")
-local GroupService = GetService("GroupService")
 
 -- Configuration and Theme
 local Config = {
@@ -43,7 +42,9 @@ local State = {
     PageContainer = nil,
     Pages = {},         
     CurrentTabButton = nil,
-    GroupCheck = { RequiredId = nil, RequiredRank = 1, IsVerified = true, BlockGui = nil }, -- Default to true
+    RequiredGroupId = nil,
+    GroupChecked = false,
+    IsInGroup = false,
 }
 
 ----------------------------------------------------------------------
@@ -131,125 +132,212 @@ local function SetupDragging(DragInstance, MainInstance)
     end)
 end
 
-----------------------------------------------------------------------
--- GROUP VERIFICATION BLOCKER
-----------------------------------------------------------------------
+-- Group Verification System
+local function CheckGroupMembership(GroupId)
+    local inGroup = false
+    pcall(function()
+        if LocalPlayer then
+            inGroup = LocalPlayer:IsInGroup(GroupId)
+        end
+    end)
+    return inGroup
+end
 
-local function ShowGroupBlocker()
-    if State.GroupCheck.BlockGui then return State.GroupCheck.BlockGui end
-
-    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-    local GroupId = State.GroupCheck.RequiredId
-
-    local BlockGui = CreateInstance("ScreenGui", { Name = "GroupBlockGui", Parent = PlayerGui, DisplayOrder = 200 })
+local function CreateGroupJoinGUI(GroupId)
+    if State.MainFrame then
+        State.MainFrame:Destroy()
+        State.MainFrame = nil
+    end
     
-    local BlockFrame = CreateInstance("Frame", {
-        Name = "BlockFrame",
-        Parent = BlockGui,
-        BackgroundTransparency = 0,
-        BackgroundColor3 = Color3.fromRGB(15, 15, 15),
-        Size = UDim2.new(0, 300, 0, 150),
-        Position = UDim2.new(0.5, -150, 0.5, -75),
+    -- Create new interface for group join
+    local PlayerGui
+    pcall(function()
+        PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    end)
+    
+    if not PlayerGui then return end
+    
+    local LibraryGui = CreateInstance("ScreenGui", {
+        Name = "GroupJoinInterface",
+        Parent = PlayerGui,
+        DisplayOrder = 100,
+    })
+    
+    local MainFrame = CreateInstance("Frame", {
+        Name = "Main",
+        Parent = LibraryGui,
+        BackgroundColor3 = Config.Theme.Background,
+        Size = UDim2.new(0, 300, 0, 200),
+        Position = UDim2.new(0.5, -150, 0.5, -100),
         BorderSizePixel = 0,
     })
-    ApplyCorner(BlockFrame)
-    State.GroupCheck.BlockGui = BlockGui
+    ApplyCorner(MainFrame)
+    State.MainFrame = MainFrame
+
+    -- Title Bar
+    local TitleBar = CreateInstance("Frame", {
+        Name = "TitleBar",
+        Parent = MainFrame,
+        BackgroundColor3 = Config.Theme.Accent,
+        BackgroundTransparency = 0.3,
+        Size = UDim2.new(1, 0, 0, Config.Theme.TitleHeight),
+        BorderSizePixel = 0,
+    })
     
-    local StatusLabel = CreateInstance("TextLabel", {
-        Name = "StatusLabel",
-        Parent = BlockFrame,
+    CreateInstance("TextLabel", {
+        Parent = TitleBar,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -20, 0.5, 0),
-        Position = UDim2.new(0, 10, 0, 10),
-        Text = "Checking Group Status...",
+        Size = UDim2.new(1, 0, 1, 0),
+        Text = "Group",
         TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansBold,
         TextSize = 20,
-        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Center,
     })
 
-    local GroupButton = CreateInstance("TextButton", {
-        Name = "GroupButton",
-        Parent = BlockFrame,
-        BackgroundColor3 = Color3.fromRGB(50, 50, 50),
-        BackgroundTransparency = 0.3,
-        Size = UDim2.new(0.9, 0, 0, 30),
-        Position = UDim2.new(0.5, -135, 0.7, 0),
-        Text = "Join Group (ID: " .. tostring(GroupId) .. ")",
-        TextColor3 = Color3.fromRGB(255, 50, 50), -- Red
+    SetupDragging(TitleBar, MainFrame)
+
+    -- Tab Container
+    local TabFrame = CreateInstance("Frame", {
+        Name = "TabFrame",
+        Parent = MainFrame,
+        BackgroundColor3 = Config.Theme.Frame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0, Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight),
+        Position = UDim2.new(0, 0, 0, Config.Theme.TitleHeight),
+        BorderSizePixel = 0,
+    })
+    
+    -- Page Container
+    local PageContainer = CreateInstance("Frame", {
+        Name = "PageContainer",
+        Parent = MainFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight),
+        Position = UDim2.new(0, Config.Theme.TabWidth, 0, Config.Theme.TitleHeight),
+        BorderSizePixel = 0,
+    })
+    
+    -- Create Join Tab
+    local JoinTabButton = CreateInstance("TextButton", {
+        Name = "JoinTab",
+        Parent = TabFrame,
+        BackgroundColor3 = Config.Theme.Frame,
+        Size = UDim2.new(1, 0, 0, Config.Theme.ElementHeight),
+        Position = UDim2.new(0, 0, 0, 0),
+        Text = "Join",
+        TextColor3 = Config.Theme.Text,
         Font = Enum.Font.SourceSansBold,
-        TextSize = 14,
+        TextSize = 15,
+        BorderSizePixel = 0,
     })
-    ApplyCorner(GroupButton)
     
-    local function CheckStatus()
-        local isInGroup = LocalPlayer:IsInGroup(GroupId)
-        local rank = LocalPlayer:GetRankInGroup(GroupId)
-        local isHighEnoughRank = rank >= State.GroupCheck.RequiredRank
+    -- Create Join Page
+    local JoinPage = CreateInstance("ScrollingFrame", {
+        Name = "JoinPage",
+        Parent = PageContainer,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        Active = true,
+        Visible = true,
+        ScrollBarImageColor3 = Color3.fromRGB(200, 200, 200),
+        ScrollBarThickness = 6,
+    })
+    
+    local YOffset = Config.Theme.Padding
+    
+    local function AddButton(Text, Callback, HeightMultiplier)
+        local ElementFrame = CreateInstance("Frame", {
+            Name = "ElementFrame",
+            Parent = JoinPage,
+            BackgroundColor3 = Config.Theme.Frame,
+            Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, Config.Theme.ElementHeight * (HeightMultiplier or 1)),
+            Position = UDim2.new(0, Config.Theme.Padding, 0, YOffset),
+            BorderSizePixel = 0,
+        })
+        ApplyCorner(ElementFrame)
         
-        if not isInGroup then
-            StatusLabel.Text = "You must join the group to proceed!"
-            GroupButton.Text = "Join Group (ID: " .. tostring(GroupId) .. ")"
-            GroupButton.TextColor3 = Color3.fromRGB(255, 50, 50)
-            return false
-        elseif rank < State.GroupCheck.RequiredRank then
-            StatusLabel.Text = "Your rank (" .. tostring(rank) .. ") is too low! Required: " .. tostring(State.GroupCheck.RequiredRank)
-            GroupButton.Text = "Check Rank/Rejoin"
-            GroupButton.TextColor3 = Color3.fromRGB(255, 165, 0)
-            return false
-        else
-            StatusLabel.Text = "Group Verified! Loading GUI..."
-            GroupButton.Text = "Verified"
-            GroupButton.TextColor3 = Color3.fromRGB(0, 255, 0)
-            BlockGui:Destroy()
-            State.GroupCheck.IsVerified = true
-            return true
+        local Button = CreateInstance("TextButton", {
+            Name = "Button",
+            Parent = ElementFrame,
+            BackgroundColor3 = Config.Theme.Frame,
+            Size = UDim2.new(1, 0, 1, 0),
+            Text = Text,
+            Font = Enum.Font.SourceSans,
+            TextSize = 14,
+            TextColor3 = Config.Theme.Text,
+        })
+        
+        if Callback then
+            pcall(function()
+                Button.MouseButton1Click:Connect(function()
+                    pcall(Callback)
+                end)
+            end)
         end
-    end
-
-    pcall(function()
-        GroupButton.MouseButton1Click:Connect(function()
-            if setclipboard then
-                setclipboard("https://www.roblox.com/groups/" .. tostring(GroupId) .. "/-")
-                StatusLabel.Text = "Group link copied! Check your browser."
-            end
-        end)
-    end)
-
-    -- Initial check and loop
-    local isVerified = CheckStatus()
-    while not isVerified do
-        task.wait(3)
-        isVerified = CheckStatus()
+        
+        YOffset = YOffset + Config.Theme.ElementHeight * (HeightMultiplier or 1) + Config.Theme.Padding
+        JoinPage.CanvasSize = UDim2.new(0, 0, 0, YOffset + Config.Theme.Padding)
+        
+        return Button
     end
     
-    return nil -- BlockGui is destroyed if verified
-end
-
--- Public function to set the required group. Must be called before Library.Create.
-function Library.RequireGroup(GroupId, RequiredRank)
-    if typeof(GroupId) == "number" and GroupId > 0 then
-        State.GroupCheck.RequiredId = GroupId
-        State.GroupCheck.RequiredRank = RequiredRank or 1
-        State.GroupCheck.IsVerified = false
-    else
-        warn("Invalid GroupId provided to RequireGroup. Skipping check.")
-    end
-    return Library
+    -- Add group join buttons to Join tab
+    AddButton("📋 Copy Group Link", function()
+        local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
+        if setclipboard then
+            setclipboard(groupLink)
+        elseif writeclipboard then
+            writeclipboard(groupLink)
+        end
+    end)
+    
+    AddButton("🔄 Check Again", function()
+        -- Check if user joined the group
+        if CheckGroupMembership(GroupId) then
+            -- User joined! Destroy this GUI and reload the script
+            LibraryGui:Destroy()
+            State.MainFrame = nil
+            State.GroupChecked = false
+            State.IsInGroup = true
+            -- The user will need to re-execute the script to get the main GUI
+        else
+            -- Still not in group, show message
+            warn("You still haven't joined the group! Join group ID: " .. GroupId)
+        end
+    end)
+    
+    return LibraryGui
 end
 
 ----------------------------------------------------------------------
 -- CORE WINDOW & TAB MANAGEMENT
 ----------------------------------------------------------------------
 
-function Library.Create(Title)
-    if State.MainFrame then return Library end
+function Library.SetGroup(GroupId)
+    State.RequiredGroupId = GroupId
+    State.GroupChecked = false
+    State.IsInGroup = false
+    return Library
+end
 
-    -- Group verification check (BLOCKING CALL)
-    if not State.GroupCheck.IsVerified and State.GroupCheck.RequiredId then
-        ShowGroupBlocker() -- This function yields until verified
+function Library.Create(Title)
+    if State.MainFrame then return Library end 
+    
+    -- Check group membership if required
+    if State.RequiredGroupId and not State.GroupChecked then
+        State.IsInGroup = CheckGroupMembership(State.RequiredGroupId)
+        State.GroupChecked = true
     end
     
+    -- If group is required and user is not in group, show group join GUI
+    if State.RequiredGroupId and not State.IsInGroup then
+        CreateGroupJoinGUI(State.RequiredGroupId)
+        return Library
+    end
+    
+    -- Normal library creation for users in group
     local PlayerGui
     pcall(function()
         PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -285,7 +373,7 @@ function Library.Create(Title)
         Name = "TitleBar",
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Accent,
-        BackgroundTransparency = 0.3, 
+        BackgroundTransparency = 0.3, -- Transparency of the drag bar (Player Utilities Part) is KEPT at 0.3
         Size = UDim2.new(1, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
@@ -357,13 +445,13 @@ function PageModule.New(PageName)
     local Self = setmetatable({
         Name = PageName,
         YOffset = Config.Theme.Padding,
-        Elements = {},  
+        Elements = {}, 
     }, {__index = PageModule})
     
     Self.Page = CreateInstance("ScrollingFrame", {
         Name = PageName .. "Page",
         Parent = State.PageContainer,
-        BackgroundTransparency = 1,  
+        BackgroundTransparency = 1, 
         Size = UDim2.new(1, 0, 1, 0),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         Active = true,
@@ -388,6 +476,11 @@ function PageModule.New(PageName)
 end
 
 function Library.NewTab(PageName)
+    -- If group is required and user is not in group, don't create tabs for main GUI
+    if State.RequiredGroupId and not State.IsInGroup then
+        return { AddButton = function() return end, AddToggle = function() return end, AddSlider = function() return end, AddTextbox = function() return end, AddDropdown = function() return end, AddGroupVerification = function() return end }
+    end
+    
     local PageCount = 0
     pcall(function()
         PageCount = #State.TabFrame:GetChildren()
@@ -406,8 +499,6 @@ function Library.NewTab(PageName)
         BorderSizePixel = 0,
     })
     
-    -- UI corners removed from tabs as requested
-    
     local Page = PageModule.New(PageName)
     
     pcall(function()
@@ -422,7 +513,7 @@ function Library.NewTab(PageName)
         TabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
     end
     
-    return Page  
+    return Page 
 end
 
 ----------------------------------------------------------------------
@@ -518,427 +609,6 @@ function PageModule:AddToggle(Text, InitialState, Callback)
         end)
     end)
     
-    return self
-end
-
--- 3. Slider (FIXED - was missing Scale variable initialization)
-function PageModule:AddSlider(Text, Min, Max, InitialValue, Callback)
-    local ElementFrame = CreateElementFrame(self, 1.5)
-    
-    local Value = InitialValue or Min
-    local Range = Max - Min
-    local SliderActive = false
-    local Scale = (Value - Min) / Range  -- FIX: Initialize Scale variable
-
-    self.Elements[Text] = { CurrentValue = Value }
-    
-    CreateInstance("TextLabel", {
-        Name = "Label",
-        Parent = ElementFrame,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.5, 0, 0, Config.Theme.ElementHeight * 0.5),
-        Text = Text,
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
-    })
-    
-    local ValueLabel = CreateInstance("TextLabel", {
-        Name = "ValueLabel",
-        Parent = ElementFrame,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.4, 0, 0, Config.Theme.ElementHeight * 0.5),
-        Text = string.format("%.1f", Value),
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Right,
-        Position = UDim2.new(0.5, -Config.Theme.Padding, 0, 0),
-    })
-    
-    local SliderBackground = CreateInstance("Frame", {
-        Name = "SliderBackground",
-        Parent = ElementFrame,
-        BackgroundColor3 = Color3.fromRGB(50, 50, 50),
-        Size = UDim2.new(1, -2 * Config.Theme.Padding, 0, 8),
-        Position = UDim2.new(0, Config.Theme.Padding, 0, Config.Theme.ElementHeight * 0.8),
-        BorderSizePixel = 0,
-    })
-    ApplyCorner(SliderBackground, 4)
-    SliderBackground.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
-    
-    local SliderBar = CreateInstance("Frame", {
-        Name = "SliderBar",
-        Parent = SliderBackground,
-        BackgroundColor3 = Color3.fromRGB(0, 255, 0),
-        Size = UDim2.new(Scale, 0, 1, 0),
-        Position = UDim2.new(0, 0, 0, 0),
-        BorderSizePixel = 0,
-    })
-    ApplyCorner(SliderBar, 4)
-    SliderBar.BackgroundTransparency = Config.Theme.Transparency -- Uses 0.650
-
-    local Handle = CreateInstance("Frame", {
-        Name = "Handle",
-        Parent = SliderBackground,
-        BackgroundColor3 = Config.Theme.Text,
-        Size = UDim2.new(0, 15, 0, 15),
-        Position = UDim2.new(Scale, -7.5, 0.5, -7.5),
-        BorderSizePixel = 0,
-    })
-    ApplyCorner(Handle, 7)
-    
-    local Dragging = false
-
-    local function UpdateSlider(XPos)
-        local SliderWidth = SliderBackground.AbsoluteSize.X
-        local RelativeX = math.max(0, math.min(SliderWidth, XPos - SliderBackground.AbsolutePosition.X))
-        local Progress = RelativeX / SliderWidth
-        
-        local NewValue = Min + (Range * Progress)
-        Value = math.floor(NewValue * 10) / 10
-
-        Scale = (Value - Min) / Range  -- FIX: Update Scale variable
-        
-        SliderBar.Size = UDim2.new(Scale, 0, 1, 0)
-        Handle.Position = UDim2.new(Scale, -7.5, 0.5, -7.5)
-        ValueLabel.Text = string.format("%.1f", Value)
-        
-        self.Elements[Text].CurrentValue = Value
-
-        -- Safe callback execution
-        if Callback then
-            pcall(function()
-                Callback(Value)
-            end)
-        end
-    end
-
-    local function OnInputChanged(Input)
-        if (Dragging or SliderActive) and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
-            UpdateSlider(Input.Position.X)
-        end
-    end
-
-    local function OnInputEnded(Input)
-        if (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) then
-            Dragging = false
-            SliderActive = false
-        end
-    end
-
-    pcall(function()
-        Handle.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                Dragging = true
-            end
-        end)
-        
-        SliderBackground.InputBegan:Connect(function(Input)
-            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-                SliderActive = true
-                UpdateSlider(Input.Position.X)
-            end
-        end)
-        
-        UserInputService.InputChanged:Connect(OnInputChanged)
-        UserInputService.InputEnded:Connect(OnInputEnded)
-    end)
-
-    return self
-end
-
--- 4. Textbox - NEWLY ADDED
-function PageModule:AddTextbox(Text, Placeholder, Callback)
-    local ElementFrame = CreateElementFrame(self)
-    
-    CreateInstance("TextLabel", {
-        Name = "Label",
-        Parent = ElementFrame,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.4, 0, 1, 0),
-        Text = Text,
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
-    })
-
-    local TextBox = CreateInstance("TextBox", {
-        Name = "TextBox",
-        Parent = ElementFrame,
-        BackgroundColor3 = Config.Theme.Frame,
-        BackgroundTransparency = 0.3, -- Slightly more transparent for input field
-        Size = UDim2.new(0.55, 0, 0.7, 0),
-        Position = UDim2.new(0.4, Config.Theme.Padding, 0.15, 0),
-        Text = "",
-        PlaceholderText = Placeholder or "Enter text...",
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        ClearTextOnFocus = false,
-    })
-    ApplyCorner(TextBox)
-
-    -- Safe callback execution on focus lost (Enter key or click away)
-    if Callback then
-        pcall(function()
-            TextBox.FocusLost:Connect(function(enterPressed)
-                pcall(function()
-                    Callback(TextBox.Text, enterPressed)
-                end)
-            end)
-        end)
-    end
-    
-    return self
-end
-
--- 5. Dropdown - NEWLY ADDED
-function PageModule:AddDropdown(Text, Options, Default, Callback)
-    local ElementFrame = CreateElementFrame(self)
-    local IsOpen = false
-    local Selected = Default or Options[1] or "Select..."
-    
-    CreateInstance("TextLabel", {
-        Name = "Label",
-        Parent = ElementFrame,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.4, 0, 1, 0),
-        Text = Text,
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
-    })
-
-    local DropdownButton = CreateInstance("TextButton", {
-        Name = "DropdownButton",
-        Parent = ElementFrame,
-        BackgroundColor3 = Config.Theme.Frame,
-        Size = UDim2.new(0.55, 0, 0.7, 0),
-        Position = UDim2.new(0.4, Config.Theme.Padding, 0.15, 0),
-        Text = Selected,
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-    })
-    ApplyCorner(DropdownButton)
-
-    local DropdownFrame = CreateInstance("Frame", {
-        Name = "DropdownFrame",
-        Parent = ElementFrame,
-        BackgroundColor3 = Config.Theme.Frame,
-        Size = UDim2.new(0.55, 0, 0, #Options * Config.Theme.ElementHeight),
-        Position = UDim2.new(0.4, Config.Theme.Padding, 0.85, 0),
-        Visible = false,
-        BorderSizePixel = 0,
-    })
-    ApplyCorner(DropdownFrame)
-    
-    local function ToggleDropdown()
-        IsOpen = not IsOpen
-        DropdownFrame.Visible = IsOpen
-        
-        if IsOpen then
-            -- Clear previous options
-            for _, child in pairs(DropdownFrame:GetChildren()) do
-                if child:IsA("TextButton") then
-                    child:Destroy()
-                end
-            end
-            
-            -- Create new options
-            for i, option in ipairs(Options) do
-                local OptionButton = CreateInstance("TextButton", {
-                    Name = "Option_" .. option,
-                    Parent = DropdownFrame,
-                    BackgroundColor3 = Config.Theme.Frame,
-                    Size = UDim2.new(1, 0, 0, Config.Theme.ElementHeight),
-                    Position = UDim2.new(0, 0, 0, (i-1) * Config.Theme.ElementHeight),
-                    Text = option,
-                    TextColor3 = Config.Theme.Text,
-                    Font = Enum.Font.SourceSans,
-                    TextSize = 12,
-                })
-                
-                pcall(function()
-                    OptionButton.MouseButton1Click:Connect(function()
-                        Selected = option
-                        DropdownButton.Text = Selected
-                        IsOpen = false
-                        DropdownFrame.Visible = false
-                        
-                        if Callback then
-                            pcall(function()
-                                Callback(Selected)
-                            end)
-                        end
-                    end)
-                end)
-            end
-        end
-    end
-
-    pcall(function()
-        DropdownButton.MouseButton1Click:Connect(function()
-            ToggleDropdown()
-        end)
-    end)
-    
-    return self
-end
-
--- 6. Group Verification - NEWLY ADDED (for internal page element display, not the blocker)
-function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
-    local ElementFrame = CreateElementFrame(self)
-    
-    local IsInGroup = false
-    local HasRequiredRank = false
-    local GroupName = "Loading..."
-    local CopyIcon = CopyLinkIcon or "📋" -- Default copy icon
-    
-    -- Create status label
-    local StatusLabel = CreateInstance("TextLabel", {
-        Name = "StatusLabel",
-        Parent = ElementFrame,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0.7, 0, 1, 0),
-        Text = "Checking group...",
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
-    })
-
-    -- Create copy link button
-    local CopyButton = CreateInstance("TextButton", {
-        Name = "CopyButton",
-        Parent = ElementFrame,
-        BackgroundColor3 = Config.Theme.Frame,
-        BackgroundTransparency = 0.3,
-        Size = UDim2.new(0, 25, 0, 25),
-        Position = UDim2.new(0.85, 0, 0.5, -12.5),
-        Text = CopyIcon,
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSans,
-        TextSize = 14,
-        Visible = false, -- Initially hidden
-    })
-    ApplyCorner(CopyButton)
-
-    -- Function to update status display
-    local function UpdateStatus()
-        if IsInGroup and HasRequiredRank then
-            StatusLabel.Text = GroupName
-            StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Green
-            CopyButton.Visible = true
-        elseif IsInGroup and not HasRequiredRank then
-            StatusLabel.Text = "Rank too low"
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 165, 0) -- Orange
-            CopyButton.Visible = true
-        else
-            StatusLabel.Text = "Join Group"
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50) -- Red
-            CopyButton.Visible = true
-        end
-    end
-
-    -- Function to check group membership
-    local function CheckGroupMembership()
-        pcall(function()
-            local player = LocalPlayer
-            if not player then return end
-            
-            -- Get group info
-            local success, groupInfo = pcall(function()
-                return GroupService:GetGroupInfoAsync(GroupId)
-            end)
-            
-            if success and groupInfo then
-                GroupName = groupInfo.Name
-                
-                -- Check if player is in group
-                local inGroup = player:IsInGroup(GroupId)
-                IsInGroup = inGroup
-                
-                if inGroup then
-                    -- Get player's rank in group
-                    local rank = player:GetRankInGroup(GroupId)
-                    HasRequiredRank = (rank >= (RequiredRank or 0))
-                else
-                    HasRequiredRank = false
-                end
-            else
-                GroupName = "Group " .. GroupId
-                IsInGroup = false
-                HasRequiredRank = false
-            end
-            
-            UpdateStatus()
-        end)
-    end
-
-    -- Function to copy group link
-    local function CopyGroupLink()
-        local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
-        
-        pcall(function()
-            -- Try to set clipboard
-            if setclipboard then
-                setclipboard(groupLink)
-            elseif writeclipboard then
-                writeclipboard(groupLink)
-            end
-            
-            -- Show check mark
-            local originalText = CopyButton.Text
-            CopyButton.Text = "✓"
-            CopyButton.TextColor3 = Color3.fromRGB(0, 255, 0)
-            
-            -- Reset after 2 seconds
-            delay(2, function()
-                if CopyButton and CopyButton.Parent then
-                    CopyButton.Text = originalText
-                    CopyButton.TextColor3 = Config.Theme.Text
-                end
-            end)
-        end)
-    end
-
-    -- Set up copy button click
-    pcall(function()
-        CopyButton.MouseButton1Click:Connect(function()
-            CopyGroupLink()
-        end)
-    end)
-
-    -- Set up status label click to copy group link/open group page
-    pcall(function()
-        StatusLabel.MouseButton1Click:Connect(function()
-            CopyGroupLink()
-        end)
-    end)
-
-    -- Initial check
-    CheckGroupMembership()
-    
-    -- Periodic re-check (every 30 seconds)
-    task.spawn(function()
-        while task.wait(30) do
-            if ElementFrame and ElementFrame.Parent then
-                CheckGroupMembership()
-            else
-                break
-            end
-        end
-    end)
-
     return self
 end
 
