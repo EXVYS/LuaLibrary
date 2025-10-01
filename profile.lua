@@ -15,6 +15,7 @@ local Players = GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local TweenService = GetService("TweenService")
 local UserInputService = GetService("UserInputService")
+local GroupService = GetService("GroupService")
 
 -- Configuration and Theme
 local Config = {
@@ -24,7 +25,7 @@ local Config = {
         Accent = Color3.fromRGB(0, 0, 0),
         Frame = Color3.fromRGB(30, 30, 30),
         Text = Color3.fromRGB(255, 255, 255),
-        Transparency = 0.650, -- Controls transparency for buttons, tabs, etc. (Original value)
+        Transparency = 0.650, -- Controls transparency for buttons, tabs, etc.
         CornerRadius = 5,
         WindowSize = UDim2.new(0, 333, 0, 189),
         TitleHeight = 35,
@@ -42,6 +43,7 @@ local State = {
     PageContainer = nil,
     Pages = {},         
     CurrentTabButton = nil,
+    GroupCheck = { RequiredId = nil, RequiredRank = 1, IsVerified = true, BlockGui = nil }, -- Default to true
 }
 
 ----------------------------------------------------------------------
@@ -130,11 +132,123 @@ local function SetupDragging(DragInstance, MainInstance)
 end
 
 ----------------------------------------------------------------------
+-- GROUP VERIFICATION BLOCKER
+----------------------------------------------------------------------
+
+local function ShowGroupBlocker()
+    if State.GroupCheck.BlockGui then return State.GroupCheck.BlockGui end
+
+    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local GroupId = State.GroupCheck.RequiredId
+
+    local BlockGui = CreateInstance("ScreenGui", { Name = "GroupBlockGui", Parent = PlayerGui, DisplayOrder = 200 })
+    
+    local BlockFrame = CreateInstance("Frame", {
+        Name = "BlockFrame",
+        Parent = BlockGui,
+        BackgroundTransparency = 0,
+        BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+        Size = UDim2.new(0, 300, 0, 150),
+        Position = UDim2.new(0.5, -150, 0.5, -75),
+        BorderSizePixel = 0,
+    })
+    ApplyCorner(BlockFrame)
+    State.GroupCheck.BlockGui = BlockGui
+    
+    local StatusLabel = CreateInstance("TextLabel", {
+        Name = "StatusLabel",
+        Parent = BlockFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, -20, 0.5, 0),
+        Position = UDim2.new(0, 10, 0, 10),
+        Text = "Checking Group Status...",
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 20,
+        TextWrapped = true,
+    })
+
+    local GroupButton = CreateInstance("TextButton", {
+        Name = "GroupButton",
+        Parent = BlockFrame,
+        BackgroundColor3 = Color3.fromRGB(50, 50, 50),
+        BackgroundTransparency = 0.3,
+        Size = UDim2.new(0.9, 0, 0, 30),
+        Position = UDim2.new(0.5, -135, 0.7, 0),
+        Text = "Join Group (ID: " .. tostring(GroupId) .. ")",
+        TextColor3 = Color3.fromRGB(255, 50, 50), -- Red
+        Font = Enum.Font.SourceSansBold,
+        TextSize = 14,
+    })
+    ApplyCorner(GroupButton)
+    
+    local function CheckStatus()
+        local isInGroup = LocalPlayer:IsInGroup(GroupId)
+        local rank = LocalPlayer:GetRankInGroup(GroupId)
+        local isHighEnoughRank = rank >= State.GroupCheck.RequiredRank
+        
+        if not isInGroup then
+            StatusLabel.Text = "You must join the group to proceed!"
+            GroupButton.Text = "Join Group (ID: " .. tostring(GroupId) .. ")"
+            GroupButton.TextColor3 = Color3.fromRGB(255, 50, 50)
+            return false
+        elseif rank < State.GroupCheck.RequiredRank then
+            StatusLabel.Text = "Your rank (" .. tostring(rank) .. ") is too low! Required: " .. tostring(State.GroupCheck.RequiredRank)
+            GroupButton.Text = "Check Rank/Rejoin"
+            GroupButton.TextColor3 = Color3.fromRGB(255, 165, 0)
+            return false
+        else
+            StatusLabel.Text = "Group Verified! Loading GUI..."
+            GroupButton.Text = "Verified"
+            GroupButton.TextColor3 = Color3.fromRGB(0, 255, 0)
+            BlockGui:Destroy()
+            State.GroupCheck.IsVerified = true
+            return true
+        end
+    end
+
+    pcall(function()
+        GroupButton.MouseButton1Click:Connect(function()
+            if setclipboard then
+                setclipboard("https://www.roblox.com/groups/" .. tostring(GroupId) .. "/-")
+                StatusLabel.Text = "Group link copied! Check your browser."
+            end
+        end)
+    end)
+
+    -- Initial check and loop
+    local isVerified = CheckStatus()
+    while not isVerified do
+        task.wait(3)
+        isVerified = CheckStatus()
+    end
+    
+    return nil -- BlockGui is destroyed if verified
+end
+
+-- Public function to set the required group. Must be called before Library.Create.
+function Library.RequireGroup(GroupId, RequiredRank)
+    if typeof(GroupId) == "number" and GroupId > 0 then
+        State.GroupCheck.RequiredId = GroupId
+        State.GroupCheck.RequiredRank = RequiredRank or 1
+        State.GroupCheck.IsVerified = false
+    else
+        warn("Invalid GroupId provided to RequireGroup. Skipping check.")
+    end
+    return Library
+end
+
+----------------------------------------------------------------------
 -- CORE WINDOW & TAB MANAGEMENT
 ----------------------------------------------------------------------
 
 function Library.Create(Title)
-    if State.MainFrame then return Library end 
+    if State.MainFrame then return Library end
+
+    -- Group verification check (BLOCKING CALL)
+    if not State.GroupCheck.IsVerified and State.GroupCheck.RequiredId then
+        ShowGroupBlocker() -- This function yields until verified
+    end
     
     local PlayerGui
     pcall(function()
@@ -171,7 +285,7 @@ function Library.Create(Title)
         Name = "TitleBar",
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Accent,
-        BackgroundTransparency = 0.3, -- Transparency of the drag bar (Player Utilities Part) is KEPT at 0.3
+        BackgroundTransparency = 0.3, 
         Size = UDim2.new(1, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
@@ -243,13 +357,13 @@ function PageModule.New(PageName)
     local Self = setmetatable({
         Name = PageName,
         YOffset = Config.Theme.Padding,
-        Elements = {}, 
+        Elements = {},  
     }, {__index = PageModule})
     
     Self.Page = CreateInstance("ScrollingFrame", {
         Name = PageName .. "Page",
         Parent = State.PageContainer,
-        BackgroundTransparency = 1, 
+        BackgroundTransparency = 1,  
         Size = UDim2.new(1, 0, 1, 0),
         CanvasSize = UDim2.new(0, 0, 0, 0),
         Active = true,
@@ -308,7 +422,7 @@ function Library.NewTab(PageName)
         TabButton.BackgroundTransparency = Config.Theme.Transparency + 0.1 -- Uses 0.650 + 0.1
     end
     
-    return Page 
+    return Page  
 end
 
 ----------------------------------------------------------------------
@@ -679,7 +793,7 @@ function PageModule:AddDropdown(Text, Options, Default, Callback)
     return self
 end
 
--- 6. Group Verification - NEWLY ADDED
+-- 6. Group Verification - NEWLY ADDED (for internal page element display, not the blocker)
 function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
     local ElementFrame = CreateElementFrame(self)
     
@@ -743,7 +857,7 @@ function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
             
             -- Get group info
             local success, groupInfo = pcall(function()
-                return game:GetService("GroupService"):GetGroupInfoAsync(GroupId)
+                return GroupService:GetGroupInfoAsync(GroupId)
             end)
             
             if success and groupInfo then
@@ -804,18 +918,10 @@ function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
         end)
     end)
 
-    -- Set up status label click to open group page
+    -- Set up status label click to copy group link/open group page
     pcall(function()
         StatusLabel.MouseButton1Click:Connect(function()
-            local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
-            pcall(function()
-                if request then
-                    request({
-                        Url = groupLink,
-                        Method = "GET"
-                    })
-                end
-            end)
+            CopyGroupLink()
         end)
     end)
 
@@ -823,13 +929,15 @@ function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
     CheckGroupMembership()
     
     -- Periodic re-check (every 30 seconds)
-    while task.wait(30) do
-        if ElementFrame and ElementFrame.Parent then
-            CheckGroupMembership()
-        else
-            break
+    task.spawn(function()
+        while task.wait(30) do
+            if ElementFrame and ElementFrame.Parent then
+                CheckGroupMembership()
+            else
+                break
+            end
         end
-    end
+    end)
 
     return self
 end
