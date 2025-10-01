@@ -292,8 +292,7 @@ function Library.NewTab(PageName)
         BorderSizePixel = 0,
     })
     
-    -- Apply UI corner with radius 3 to tabs
-    ApplyCorner(TabButton, 3)
+    -- UI corners removed from tabs as requested
     
     local Page = PageModule.New(PageName)
     
@@ -677,6 +676,161 @@ function PageModule:AddDropdown(Text, Options, Default, Callback)
         end)
     end)
     
+    return self
+end
+
+-- 6. Group Verification - NEWLY ADDED
+function PageModule:AddGroupVerification(GroupId, RequiredRank, CopyLinkIcon)
+    local ElementFrame = CreateElementFrame(self)
+    
+    local IsInGroup = false
+    local HasRequiredRank = false
+    local GroupName = "Loading..."
+    local CopyIcon = CopyLinkIcon or "📋" -- Default copy icon
+    
+    -- Create status label
+    local StatusLabel = CreateInstance("TextLabel", {
+        Name = "StatusLabel",
+        Parent = ElementFrame,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(0.7, 0, 1, 0),
+        Text = "Checking group...",
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Position = UDim2.new(0, Config.Theme.Padding, 0, 0),
+    })
+
+    -- Create copy link button
+    local CopyButton = CreateInstance("TextButton", {
+        Name = "CopyButton",
+        Parent = ElementFrame,
+        BackgroundColor3 = Config.Theme.Frame,
+        BackgroundTransparency = 0.3,
+        Size = UDim2.new(0, 25, 0, 25),
+        Position = UDim2.new(0.85, 0, 0.5, -12.5),
+        Text = CopyIcon,
+        TextColor3 = Config.Theme.Text,
+        Font = Enum.Font.SourceSans,
+        TextSize = 14,
+        Visible = false, -- Initially hidden
+    })
+    ApplyCorner(CopyButton)
+
+    -- Function to update status display
+    local function UpdateStatus()
+        if IsInGroup and HasRequiredRank then
+            StatusLabel.Text = GroupName
+            StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 0) -- Green
+            CopyButton.Visible = true
+        elseif IsInGroup and not HasRequiredRank then
+            StatusLabel.Text = "Rank too low"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 165, 0) -- Orange
+            CopyButton.Visible = true
+        else
+            StatusLabel.Text = "Join Group"
+            StatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50) -- Red
+            CopyButton.Visible = true
+        end
+    end
+
+    -- Function to check group membership
+    local function CheckGroupMembership()
+        pcall(function()
+            local player = LocalPlayer
+            if not player then return end
+            
+            -- Get group info
+            local success, groupInfo = pcall(function()
+                return game:GetService("GroupService"):GetGroupInfoAsync(GroupId)
+            end)
+            
+            if success and groupInfo then
+                GroupName = groupInfo.Name
+                
+                -- Check if player is in group
+                local inGroup = player:IsInGroup(GroupId)
+                IsInGroup = inGroup
+                
+                if inGroup then
+                    -- Get player's rank in group
+                    local rank = player:GetRankInGroup(GroupId)
+                    HasRequiredRank = (rank >= (RequiredRank or 0))
+                else
+                    HasRequiredRank = false
+                end
+            else
+                GroupName = "Group " .. GroupId
+                IsInGroup = false
+                HasRequiredRank = false
+            end
+            
+            UpdateStatus()
+        end)
+    end
+
+    -- Function to copy group link
+    local function CopyGroupLink()
+        local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
+        
+        pcall(function()
+            -- Try to set clipboard
+            if setclipboard then
+                setclipboard(groupLink)
+            elseif writeclipboard then
+                writeclipboard(groupLink)
+            end
+            
+            -- Show check mark
+            local originalText = CopyButton.Text
+            CopyButton.Text = "✓"
+            CopyButton.TextColor3 = Color3.fromRGB(0, 255, 0)
+            
+            -- Reset after 2 seconds
+            delay(2, function()
+                if CopyButton and CopyButton.Parent then
+                    CopyButton.Text = originalText
+                    CopyButton.TextColor3 = Config.Theme.Text
+                end
+            end)
+        end)
+    end
+
+    -- Set up copy button click
+    pcall(function()
+        CopyButton.MouseButton1Click:Connect(function()
+            CopyGroupLink()
+        end)
+    end)
+
+    -- Set up status label click to open group page
+    pcall(function()
+        StatusLabel.MouseButton1Click:Connect(function()
+            local groupLink = "https://www.roblox.com/groups/" .. tostring(GroupId)
+            pcall(function()
+                if request then
+                    request({
+                        Url = groupLink,
+                        Method = "GET"
+                    })
+                end
+            end)
+        end)
+    end)
+
+    -- Initial check
+    CheckGroupMembership()
+    
+    -- Periodic re-check (every 30 seconds)
+    while task.wait(30) do
+        if ElementFrame and ElementFrame.Parent then
+            CheckGroupMembership()
+        else
+            break
+        end
+    end
+
     return self
 end
 
