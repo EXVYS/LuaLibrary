@@ -42,7 +42,6 @@ local State = {
     PageContainer = nil,
     Pages = {},         
     CurrentTabButton = nil,
-    ProfileFrame = nil, -- Added for reference
 }
 
 ----------------------------------------------------------------------
@@ -131,118 +130,6 @@ local function SetupDragging(DragInstance, MainInstance)
 end
 
 ----------------------------------------------------------------------
--- PROFILE VIEW FUNCTIONS (UPDATED - Now inside MainFrame with scaling text)
-----------------------------------------------------------------------
-
-local function CreateProfileView(Parent)
-    -- We assume LocalPlayer is available because GetService("Players") succeeded earlier.
-    if not LocalPlayer then return end
-
-    local ProfileContainer = CreateInstance("Frame", {
-        Name = "ProfileContainer",
-        Parent = Parent,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -20, 0, 50), -- Full width minus padding, fixed height
-        Position = UDim2.new(0, 10, 1, -60), -- Bottom left corner with padding
-        AnchorPoint = Vector2.new(0, 1),
-    })
-    
-    -- Circular Profile Picture
-    local ProfilePicture = CreateInstance("ImageLabel", {
-        Name = "ProfilePicture",
-        Parent = ProfileContainer,
-        BackgroundColor3 = Config.Theme.Frame,
-        BackgroundTransparency = 0,
-        Size = UDim2.new(0, 40, 0, 40),
-        Position = UDim2.new(0, 0, 0, 0),
-        BorderSizePixel = 0,
-    })
-    ApplyCorner(ProfilePicture, 20) -- Make it circular
-    
-    -- Name Container (scales with available width)
-    local NameContainer = CreateInstance("Frame", {
-        Name = "NameContainer",
-        Parent = ProfileContainer,
-        BackgroundColor3 = Config.Theme.Frame,
-        BackgroundTransparency = Config.Theme.Transparency, -- 0.650 transparency
-        Size = UDim2.new(1, -50, 0, 40), -- Takes remaining width after profile picture
-        Position = UDim2.new(0, 45, 0, 0),
-        BorderSizePixel = 0,
-    })
-    ApplyCorner(NameContainer, 4)
-    
-    -- Display Name with text scaling
-    local DisplayName = CreateInstance("TextLabel", {
-        Name = "DisplayName",
-        Parent = NameContainer,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -10, 0, 20),
-        Position = UDim2.new(0, 5, 0, 0),
-        Text = "Loading...",
-        TextColor3 = Config.Theme.Text,
-        Font = Enum.Font.SourceSansSemibold,
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextScaled = true, -- Enable text scaling
-        TextWrapped = true, -- Allow text wrapping
-    })
-    
-    -- Username with text scaling
-    local Username = CreateInstance("TextLabel", {
-        Name = "Username",
-        Parent = NameContainer,
-        BackgroundTransparency = 1,
-        Size = UDim2.new(1, -10, 0, 18),
-        Position = UDim2.new(0, 5, 0, 20),
-        Text = "@user",
-        TextColor3 = Config.Theme.Text,
-        TextTransparency = 0.65, -- 0.65 transparency for username
-        Font = Enum.Font.SourceSans,
-        TextSize = 12, -- Smaller text size
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextScaled = true, -- Enable text scaling
-        TextWrapped = true, -- Allow text wrapping
-    })
-    
-    -- Function to update profile info
-    local function UpdateProfileInfo()
-        pcall(function()
-            local userId = LocalPlayer.UserId
-            local displayName = LocalPlayer.DisplayName
-            local userName = LocalPlayer.Name
-            
-            -- Set display name and username with text scaling considerations
-            DisplayName.Text = displayName
-            Username.Text = "@" .. userName
-            
-            -- Load profile picture
-            local ThumbnailType = Enum.ThumbnailType.HeadShot
-            local ThumbnailSize = Enum.ThumbnailSize.Size150x150
-            
-            -- Note: GetUserThumbnailAsync is safe to call from client scripts.
-            local success, content, isReady = pcall(Players.GetUserThumbnailAsync, Players, userId, ThumbnailType, ThumbnailSize)
-            
-            if success and isReady and content then
-                ProfilePicture.Image = content
-            else
-                -- Fallback if thumbnail fails to load immediately or pcall failed
-                warn("Failed to load user thumbnail for profile view.")
-            end
-        end)
-    end
-    
-    -- Update profile when player is ready and on property change
-    if LocalPlayer then
-        UpdateProfileInfo()
-        -- Update if player properties change (e.g., display name change)
-        LocalPlayer:GetPropertyChangedSignal("DisplayName"):Connect(UpdateProfileInfo)
-    end
-    
-    State.ProfileFrame = ProfileContainer
-    return ProfileContainer
-end
-
-----------------------------------------------------------------------
 -- CORE WINDOW & TAB MANAGEMENT
 ----------------------------------------------------------------------
 
@@ -279,9 +166,6 @@ function Library.Create(Title)
     ApplyCorner(MainFrame)
     State.MainFrame = MainFrame
 
-    -- ** FIX APPLIED HERE: Profile View is now inside the MainFrame at bottom left **
-    CreateProfileView(State.MainFrame)
-
     -- 3. Title Bar (Now acts as the full dragger)
     local TitleBar = CreateInstance("Frame", {
         Name = "TitleBar",
@@ -313,7 +197,7 @@ function Library.Create(Title)
         Parent = MainFrame,
         BackgroundColor3 = Config.Theme.Frame,
         BackgroundTransparency = 1,
-        Size = UDim2.new(0, Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight - 60), -- Reduced height to accommodate profile
+        Size = UDim2.new(0, Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight),
         Position = UDim2.new(0, 0, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
@@ -323,7 +207,7 @@ function Library.Create(Title)
         Name = "PageContainer",
         Parent = MainFrame,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, -Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight - 60), -- Reduced height to accommodate profile
+        Size = UDim2.new(1, -Config.Theme.TabWidth, 1, -Config.Theme.TitleHeight),
         Position = UDim2.new(0, Config.Theme.TabWidth, 0, Config.Theme.TitleHeight),
         BorderSizePixel = 0,
     })
@@ -407,6 +291,9 @@ function Library.NewTab(PageName)
         TextSize = 15,
         BorderSizePixel = 0,
     })
+    
+    -- Apply UI corner with radius 3 to tabs
+    ApplyCorner(TabButton, 3)
     
     local Page = PageModule.New(PageName)
     
